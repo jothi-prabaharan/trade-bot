@@ -1,0 +1,61 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using TradeBot.Domain.Entities.Mst;
+
+namespace TradeBot.Infrastructure.Persistence.Configurations.Mst;
+
+internal sealed class GeminiNewsConfigConfiguration : IEntityTypeConfiguration<GeminiNewsConfig>
+{
+    public void Configure(EntityTypeBuilder<GeminiNewsConfig> b)
+    {
+        b.ToTable("gemini_news_config", Schemas.Mst, t =>
+        {
+            t.HasCheckConstraint("ck_gemini_news_config_weights_sum", "pattern_weight_pct + news_weight_pct + oi_greeks_weight_pct = 100");
+            t.HasCheckConstraint("ck_gemini_news_config_weights_range",
+                "pattern_weight_pct BETWEEN 0 AND 100 AND news_weight_pct BETWEEN 0 AND 100 AND oi_greeks_weight_pct BETWEEN 0 AND 100");
+            t.HasCheckConstraint("ck_gemini_news_config_polling", "intraday_poll_seconds >= 10 AND volume_spike_trigger_multiplier > 1 AND max_calls_per_minute >= 1");
+        });
+
+        b.HasKey(x => x.GeminiConfigId);
+        b.Property(x => x.ModelName).HasMaxLength(100);
+        b.Property(x => x.PatternWeightPct).Score();
+        b.Property(x => x.NewsWeightPct).Score();
+        b.Property(x => x.OiGreeksWeightPct).Score();
+        b.Property(x => x.VolumeSpikeTriggerMultiplier).HasPrecision(6, 2);
+        b.HasIndex(x => x.IsActive).IsUnique().HasFilter("is_active").HasDatabaseName("ux_gemini_news_config_single_active");
+    }
+}
+
+internal sealed class StrategyConfigConfiguration : IEntityTypeConfiguration<StrategyConfig>
+{
+    public void Configure(EntityTypeBuilder<StrategyConfig> b)
+    {
+        b.ToTable("strategy_config", Schemas.Mst, t =>
+        {
+            t.HasCheckConstraint("ck_strategy_config_session_times",
+                "entry_start_time >= TIME '09:15' AND entry_cutoff_time > entry_start_time AND square_off_time > entry_cutoff_time AND square_off_time <= TIME '15:29'");
+            t.HasCheckConstraint("ck_strategy_config_auth", "auth_login_time < entry_start_time AND auth_max_retries BETWEEN 0 AND 10");
+            t.HasCheckConstraint("ck_strategy_config_confidence", "min_combined_confidence BETWEEN 0 AND 100");
+            t.HasCheckConstraint("ck_strategy_config_timeframes", "trend_timeframe <> trigger_timeframe");
+        });
+
+        b.HasKey(x => x.StrategyConfigId);
+        b.Property(x => x.MinCombinedConfidence).Score();
+        b.HasIndex(x => x.IsActive).IsUnique().HasFilter("is_active").HasDatabaseName("ux_strategy_config_single_active");
+    }
+}
+
+internal sealed class AlertChannelConfiguration : IEntityTypeConfiguration<AlertChannel>
+{
+    public void Configure(EntityTypeBuilder<AlertChannel> b)
+    {
+        b.ToTable("alert_channels", Schemas.Mst, t =>
+            t.HasCheckConstraint("ck_alert_channels_telegram_complete",
+                "NOT is_active OR channel_type <> 'TELEGRAM' OR (bot_token IS NOT NULL AND chat_id IS NOT NULL)"));
+
+        b.HasKey(x => x.AlertChannelId);
+        b.Property(x => x.ChannelName).HasMaxLength(100);
+        b.Property(x => x.ChatId).HasMaxLength(100);
+        b.HasIndex(x => x.ChannelName).IsUnique();
+    }
+}

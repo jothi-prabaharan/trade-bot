@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TradeBot.Domain/TradeBot.Domain.csproj" />
+    <Project Path="src/TradeBot.Infrastructure/TradeBot.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TradeBot.Infrastructure.Tests/TradeBot.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>
