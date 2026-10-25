@@ -10,6 +10,7 @@ public sealed class PaperOrder
     public required TxnType Side { get; init; }
     public required int Quantity { get; init; }
     public required decimal Tick { get; init; }
+    public required decimal SlippagePct { get; init; }
     public OrderType Type { get; set; }
     public decimal Price { get; set; }
     public decimal? Trigger { get; set; }
@@ -34,13 +35,14 @@ public sealed class PaperExchange(decimal slippagePct)
 
     public PaperOrder? Get(long id) { lock (_lock) return _orders.GetValueOrDefault(id); }
 
-    public (PaperOrder Order, PaperFill? Fill) Place(long securityId, TxnType side, int qty, OrderType type, decimal price, decimal? trigger, decimal tick, decimal? lastLtp, DateTime nowUtc)
+    public (PaperOrder Order, PaperFill? Fill) Place(long securityId, TxnType side, int qty, OrderType type, decimal price, decimal? trigger, decimal tick, decimal? lastLtp, DateTime nowUtc, decimal? orderSlippagePct = null)
     {
         lock (_lock)
         {
             var o = new PaperOrder
             {
-                Id = _nextId++, SecurityId = securityId, Side = side, Quantity = qty, Tick = tick, Type = type, Price = price, Trigger = trigger,
+                Id = _nextId++, SecurityId = securityId, Side = side, Quantity = qty, Tick = tick, SlippagePct = orderSlippagePct ?? slippagePct,
+                Type = type, Price = price, Trigger = trigger,
                 Status = type == OrderType.StopLossLimit ? OrderStatus.TriggerPending : OrderStatus.Open,
             };
             _orders[o.Id] = o;
@@ -97,12 +99,12 @@ public sealed class PaperExchange(decimal slippagePct)
         if (o.Side == TxnType.Buy)
         {
             if (ltp > o.Price) return null;
-            fill = Math.Min(o.Price, TickMath.RoundUp(ltp * (1 + slippagePct / 100), o.Tick));
+            fill = Math.Min(o.Price, TickMath.RoundUp(ltp * (1 + o.SlippagePct / 100), o.Tick));
         }
         else
         {
             if (ltp < o.Price) return null;
-            fill = Math.Max(o.Price, TickMath.RoundDown(ltp * (1 - slippagePct / 100), o.Tick));
+            fill = Math.Max(o.Price, TickMath.RoundDown(ltp * (1 - o.SlippagePct / 100), o.Tick));
         }
 
         o.Status = OrderStatus.Filled;

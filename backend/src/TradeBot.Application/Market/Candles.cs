@@ -18,8 +18,8 @@ public sealed record Bar(DateTime Time, decimal Open, decimal High, decimal Low,
 /// <summary>Series key: the instrument's continuous futures (SecurityId null) or a specific contract.</summary>
 public readonly record struct SeriesKey(long InstrumentId, long? SecurityId);
 
-/// <summary>A tick from the feed. CumulativeVolume is the exchange's day volume (null for indices).</summary>
-public readonly record struct Tick(long SecurityId, decimal Ltp, DateTime TimeUtc, long? CumulativeVolume = null, long? OpenInterest = null);
+/// <summary>A tick from the feed. CumulativeVolume is the day volume; AverageTradedPrice is the exchange's session VWAP.</summary>
+public readonly record struct Tick(long SecurityId, decimal Ltp, DateTime TimeUtc, long? CumulativeVolume = null, long? OpenInterest = null, decimal? AverageTradedPrice = null);
 
 public sealed record ClosedBar(SeriesKey Series, Timeframe Timeframe, Bar Bar);
 
@@ -124,21 +124,25 @@ public sealed class CandleAggregator(IReadOnlyCollection<Timeframe> timeframes)
     private static ClosedBar Close(SeriesKey s, Timeframe tf, Working w) => new(s, tf, new Bar(w.Start, w.O, w.H, w.L, w.C, w.V, w.Oi));
 }
 
-/// <summary>Bounded per-series bar history used by the pattern engine.</summary>
+/// <summary>Bounded per-series bar history shared by the feed thread (writes) and the scanner (reads).</summary>
 public sealed class BarHistory(int capacity = 600)
 {
     private readonly Dictionary<(SeriesKey, Timeframe), List<Bar>> _bars = new();
+    private readonly Lock _lock = new();
 
     public void Add(SeriesKey series, Timeframe tf, Bar bar)
     {
-        if (!_bars.TryGetValue((series, tf), out var list)) _bars[(series, tf)] = list = [];
-        if (list.Count > 0 && list[^1].Time >= bar.Time)
+        lock (_lock)
         {
-            if (list[^1].Time == bar.Time) list[^1] = bar;
-            return;
+            if (!_bars.TryGetValue((series, tf), out var list)) _bars[(series, tf)] = list = [];
+            if (list.Count > 0 && list[^1].Time >= bar.Time)
+            {
+                if (list[^1].Time == bar.Time) list[^1] = bar;
+                return;
+            }
+            list.Add(bar);
+            if (list.Count > capacity) list.RemoveRange(0, list.Count - capacity);
         }
-        list.Add(bar);
-        if (list.Count > capacity) list.RemoveRange(0, list.Count - capacity);
     }
 
     public void Load(SeriesKey series, Timeframe tf, IEnumerable<Bar> bars)
@@ -146,6 +150,14 @@ public sealed class BarHistory(int capacity = 600)
         foreach (var b in bars.OrderBy(b => b.Time)) Add(series, tf, b);
     }
 
-    public IReadOnlyList<Bar> Get(SeriesKey series, Timeframe tf) =>
-        _bars.TryGetValue((series, tf), out var list) ? list : [];
+    /// <summary>Snapshot copy; safe to use while new bars arrive.</summary>
+    public IReadOnlyList<Bar> Get(SeriesKey series, Timeframe tf)
+    {
+        lock (_lock) return _bars.TryGetValue((series, tf), out var list) ? list.ToList() : [];
+    }
+
+    public int Count(SeriesKey series, Timeframe tf)
+    {
+        lock (_lock) return _bars.TryGetValue((series, tf), out var list) ? list.Count : 0;
+    }
 }

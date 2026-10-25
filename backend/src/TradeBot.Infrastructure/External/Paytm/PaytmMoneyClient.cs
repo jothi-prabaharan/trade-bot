@@ -128,9 +128,10 @@ public sealed class PaytmMoneyClient(HttpClient http, IOptions<PaytmMoneyOptions
         var now = DateTime.UtcNow;
         return JsonFind.Rows(doc.RootElement)
             .Where(r => r.ValueKind == JsonValueKind.Object)
-            .Select(r => (Id: JsonFind.Long(r, "security_id", "scrip_id"), Ltp: JsonFind.Dec(r, "last_price", "ltp"), Vol: JsonFind.Long(r, "volume_traded", "volume"), Oi: JsonFind.Long(r, "oi", "open_interest")))
+            .Select(r => (Id: JsonFind.Long(r, "security_id", "scrip_id"), Ltp: JsonFind.Dec(r, "last_price", "ltp"), Vol: JsonFind.Long(r, "volume_traded", "volume"),
+                Oi: JsonFind.Long(r, "oi", "open_interest"), Atp: JsonFind.Dec(r, "average_traded_price", "atp", "avg_price")))
             .Where(x => x.Id is not null && x.Ltp is > 0)
-            .Select(x => new Tick(x.Id!.Value, x.Ltp!.Value, now, x.Vol, x.Oi))
+            .Select(x => new Tick(x.Id!.Value, x.Ltp!.Value, now, x.Vol, x.Oi, x.Atp))
             .ToList();
     }
 

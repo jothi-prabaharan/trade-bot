@@ -31,8 +31,8 @@ public static class PaytmTickParser
             var tick = type switch
             {
                 Ltp or IndexLtp => new Tick(U32(b, 8), F(b, 0), receivedUtc),
-                Quote => new Tick(U32(b, 8), F(b, 0), receivedUtc, U32(b, 22)),
-                Full => new Tick(U32(b, 108), F(b, 100), receivedUtc, U32(b, 122), U32(b, 166)),
+                Quote => new Tick(U32(b, 8), F(b, 0), receivedUtc, U32(b, 22), null, F(b, 18)),
+                Full => new Tick(U32(b, 108), F(b, 100), receivedUtc, U32(b, 122), U32(b, 166), F(b, 118)),
                 _ => new Tick(U32(b, 4), F(b, 0), receivedUtc), // index quote/full
             };
             if (tick.Ltp > 0 && tick.SecurityId > 0) ticks.Add(tick);
@@ -40,6 +40,10 @@ public static class PaytmTickParser
         return ticks;
     }
 
-    private static decimal F(ReadOnlySpan<byte> b, int at) => Math.Round((decimal)BinaryPrimitives.ReadSingleLittleEndian(b[at..]), 2);
+    private static decimal F(ReadOnlySpan<byte> b, int at)
+    {
+        var f = BinaryPrimitives.ReadSingleLittleEndian(b[at..]);
+        return float.IsFinite(f) && Math.Abs(f) < 1e9f ? Math.Round((decimal)f, 2) : 0; // corrupt floats must not throw
+    }
     private static long U32(ReadOnlySpan<byte> b, int at) => BinaryPrimitives.ReadUInt32LittleEndian(b[at..]);
 }

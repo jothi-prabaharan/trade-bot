@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/TradeBot.Api/TradeBot.Api.csproj" />
     <Project Path="src/TradeBot.Application/TradeBot.Application.csproj" />
     <Project Path="src/TradeBot.Domain/TradeBot.Domain.csproj" />
     <Project Path="src/TradeBot.Infrastructure/TradeBot.Infrastructure.csproj" />
