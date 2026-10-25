@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TradeBot.Domain\TradeBot.Domain.csproj" />
+    <ProjectReference Include="..\TradeBot.Application\TradeBot.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -11,8 +12,16 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.64.1" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
 
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TradeBot.Infrastructure.Tests" />
+  </ItemGroup>
 
 </Project>
