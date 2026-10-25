@@ -67,6 +67,8 @@ public class AccountRiskConfig : AuditableEntity
     public decimal MaxDailyProfit { get; set; } = 6000m;
     public int MaxOpenTrades { get; set; } = 1;
     public int MaxLotsPerTrade { get; set; } = 10;
+    public int MaxTradesPerDay { get; set; } = 3;
+    public int ReentryCooldownMinutes { get; set; } = 15;
     public decimal LotMultiplier { get; set; } = 1m;
     public decimal MinPatternConfidence { get; set; } = 70m;
     public bool BlockTradeOnOpposingNews { get; set; } = true;

@@ -37,6 +37,13 @@ public class StrategyConfig : AuditableEntity
     public TimeOnly SquareOffTime { get; set; } = new(15, 15);
     public TimeOnly AuthLoginTime { get; set; } = new(8, 45);
     public int AuthMaxRetries { get; set; } = 3;
+    /// <summary>Exchange SL-L limit sits this % below the trigger.</summary>
+    public decimal SlLimitBufferPct { get; set; } = 2m;
+    /// <summary>Seconds a triggered SL may stay unfilled before an aggressive exit replaces it.</summary>
+    public int SlGapFallbackSeconds { get; set; } = 2;
+    public int EntryFillTimeoutSeconds { get; set; } = 10;
+    public int StockWatchlistSize { get; set; } = 20;
+    public int HistoryBackfillDays { get; set; } = 5;
     public bool IsActive { get; set; } = true;
 }
 

@@ -182,6 +182,10 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(7,4)")
                         .HasColumnName("max_sl_pct");
 
+                    b.Property<int>("MaxTradesPerDay")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_trades_per_day");
+
                     b.Property<decimal>("MinPatternConfidence")
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)")
@@ -201,6 +205,10 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("opening_balance");
+
+                    b.Property<int>("ReentryCooldownMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("reentry_cooldown_minutes");
 
                     b.Property<decimal>("RiskPerTradePct")
                         .HasPrecision(7, 4)
@@ -270,6 +278,8 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_account_risk_config_sizing", "max_open_trades >= 1 AND max_lots_per_trade >= 1 AND lot_multiplier > 0 AND lot_multiplier <= 1");
 
                             t.HasCheckConstraint("ck_account_risk_config_sl_target", "default_sl_pct > 0 AND default_sl_pct < 100 AND default_target_pct > 0 AND max_sl_pct >= default_sl_pct AND max_sl_pct < 100");
+
+                            t.HasCheckConstraint("ck_account_risk_config_trade_pacing", "max_trades_per_day BETWEEN 1 AND 100 AND reentry_cooldown_minutes BETWEEN 0 AND 240");
 
                             t.HasCheckConstraint("ck_account_risk_config_trailing", "breakeven_trigger_pct > 0 AND breakeven_trigger_pct <= 100 AND trailing_sl_step_pct > 0 AND trailing_sl_step_pct < 100");
                         });
@@ -1002,6 +1012,10 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
                         .HasColumnType("time without time zone")
                         .HasColumnName("entry_cutoff_time");
 
+                    b.Property<int>("EntryFillTimeoutSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("entry_fill_timeout_seconds");
+
                     b.Property<TimeOnly>("EntryStartTime")
                         .HasColumnType("time without time zone")
                         .HasColumnName("entry_start_time");
@@ -1011,6 +1025,10 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
                         .HasMaxLength(23)
                         .HasColumnType("character varying(23)")
                         .HasColumnName("expiry_policy");
+
+                    b.Property<int>("HistoryBackfillDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("history_backfill_days");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
@@ -1031,9 +1049,22 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("require_option_confirmation");
 
+                    b.Property<int>("SlGapFallbackSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("sl_gap_fallback_seconds");
+
+                    b.Property<decimal>("SlLimitBufferPct")
+                        .HasPrecision(7, 4)
+                        .HasColumnType("numeric(7,4)")
+                        .HasColumnName("sl_limit_buffer_pct");
+
                     b.Property<TimeOnly>("SquareOffTime")
                         .HasColumnType("time without time zone")
                         .HasColumnName("square_off_time");
+
+                    b.Property<int>("StockWatchlistSize")
+                        .HasColumnType("integer")
+                        .HasColumnName("stock_watchlist_size");
 
                     b.Property<string>("StrikeSelection")
                         .IsRequired()
@@ -1073,6 +1104,8 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_strategy_config_confidence", "min_combined_confidence BETWEEN 0 AND 100");
 
+                            t.HasCheckConstraint("ck_strategy_config_execution", "sl_limit_buffer_pct > 0 AND sl_limit_buffer_pct <= 10 AND sl_gap_fallback_seconds BETWEEN 1 AND 30 AND entry_fill_timeout_seconds BETWEEN 2 AND 60");
+
                             t.HasCheckConstraint("ck_strategy_config_expiry_policy", "expiry_policy IN ('NEAREST_SKIP_EXPIRY_DAY', 'NEAREST', 'MONTHLY_ONLY')");
 
                             t.HasCheckConstraint("ck_strategy_config_product", "product IN ('I', 'M', 'B')");
@@ -1086,6 +1119,8 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_strategy_config_trend_timeframe", "trend_timeframe IN ('1m', '3m', '5m', '15m', '1h', '1d')");
 
                             t.HasCheckConstraint("ck_strategy_config_trigger_timeframe", "trigger_timeframe IN ('1m', '3m', '5m', '15m', '1h', '1d')");
+
+                            t.HasCheckConstraint("ck_strategy_config_universe", "stock_watchlist_size BETWEEN 0 AND 50 AND history_backfill_days BETWEEN 1 AND 30");
                         });
                 });
 
@@ -1796,6 +1831,67 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_daily_trades_trade_status", "trade_status IN ('OPEN', 'TARGET_HIT', 'SL_HIT', 'TRAILING_SL_HIT', 'TIME_SQUARE_OFF', 'KILL_SWITCH_EXIT', 'MANUAL_EXIT')");
 
                             t.HasCheckConstraint("ck_daily_trades_trailing_sl", "trailing_sl_price >= stop_loss_price AND trailing_sl_price < target_sell_price");
+                        });
+                });
+
+            modelBuilder.Entity("TradeBot.Domain.Entities.Trn.DailyWatchlist", b =>
+                {
+                    b.Property<long>("WatchlistId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("watchlist_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("WatchlistId"));
+
+                    b.Property<DateTime>("AddedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<long>("InstrumentId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("instrument_id");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("reason");
+
+                    b.Property<decimal>("Score")
+                        .HasPrecision(7, 2)
+                        .HasColumnType("numeric(7,2)")
+                        .HasColumnName("score");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("source");
+
+                    b.Property<DateOnly>("TradingDate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("date")
+                        .HasColumnName("trading_date")
+                        .HasDefaultValueSql("(now() AT TIME ZONE 'Asia/Kolkata')::date");
+
+                    b.HasKey("WatchlistId")
+                        .HasName("pk_daily_watchlist");
+
+                    b.HasIndex("InstrumentId")
+                        .HasDatabaseName("ix_daily_watchlist_instrument_id");
+
+                    b.HasIndex("TradingDate", "InstrumentId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_daily_watchlist_trading_date_instrument_id");
+
+                    b.ToTable("daily_watchlist", "trn", t =>
+                        {
+                            t.HasCheckConstraint("ck_daily_watchlist_source", "source IN ('INDEX', 'PREMARKET', 'VOLUME_SPIKE', 'NEWS')");
                         });
                 });
 
@@ -2600,6 +2696,18 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
                     b.Navigation("SlOrder");
 
                     b.Navigation("TargetOrder");
+                });
+
+            modelBuilder.Entity("TradeBot.Domain.Entities.Trn.DailyWatchlist", b =>
+                {
+                    b.HasOne("TradeBot.Domain.Entities.Mst.Instrument", "Instrument")
+                        .WithMany()
+                        .HasForeignKey("InstrumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_daily_watchlist_instruments_instrument_id");
+
+                    b.Navigation("Instrument");
                 });
 
             modelBuilder.Entity("TradeBot.Domain.Entities.Trn.DetectedPattern", b =>

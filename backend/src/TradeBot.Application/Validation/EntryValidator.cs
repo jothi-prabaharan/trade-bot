@@ -23,6 +23,9 @@ public sealed record EntryContext
     public DailyBotState? BotState { get; init; }
     public required int OpenTradeCount { get; init; }
     public required bool HasOrderForSignal { get; init; }
+    public int TradesToday { get; init; }
+    /// <summary>Exit time of this account's latest SL / trailing-SL exit on the signal's instrument today.</summary>
+    public DateTime? LastStopOutOnInstrumentUtc { get; init; }
     public required StrategyConfig Strategy { get; init; }
     public required GeminiNewsConfig Gemini { get; init; }
     public required Instrument Instrument { get; init; }
@@ -33,6 +36,9 @@ public sealed record EntryContext
     public DailyMarketSentiment? Sentiment { get; init; }
     public IReadOnlyList<NewsImpact> TodaysNews { get; init; } = [];
     public required LiveQuote Quote { get; init; }
+    /// <summary>Account-specific bracket when its risk policy differs from the signal's reference policy.</summary>
+    public decimal? StopLossPrice { get; init; }
+    public decimal? TargetPrice { get; init; }
     /// <summary>REAL: mst.charge_rates brokerage; PAPER: simulated_brokerage_per_order.</summary>
     public required decimal BrokeragePerOrder { get; init; }
 }
@@ -87,6 +93,9 @@ public static class EntryValidator
         }
         if (c.OpenTradeCount >= c.Risk.MaxOpenTrades) v.Add(RuleCatalog.Violation(RuleCodes.MaxOpenTrades));
         if (c.HasOrderForSignal) v.Add(RuleCatalog.Violation(RuleCodes.DuplicateSignal));
+        if (c.TradesToday >= c.Risk.MaxTradesPerDay) v.Add(RuleCatalog.Violation(RuleCodes.MaxTradesPerDay));
+        if (c.LastStopOutOnInstrumentUtc is { } stopOut && c.NowUtc - stopOut < TimeSpan.FromMinutes(c.Risk.ReentryCooldownMinutes))
+            v.Add(RuleCatalog.Violation(RuleCodes.ReentryCooldown));
 
         // Master: instrument & strategy
         if (!c.Instrument.IsActive || !c.Instrument.IsTradable) v.Add(RuleCatalog.Violation(RuleCodes.InstrumentNotTradable));
@@ -135,8 +144,8 @@ public static class EntryValidator
         if (ltp < r.MinSingleTradePrice || ltp > r.MaxSingleTradePrice) v.Add(RuleCatalog.Violation(RuleCodes.PremiumOutOfBand));
 
         var limit = TickMath.RoundUp(ltp * (1 + r.SlippageBufferPct / 100), tick);
-        var sl = TickMath.RoundUp(c.Signal.MandatorySlPrice, tick);       // tighter
-        var target = TickMath.RoundDown(c.Signal.MandatoryTargetPrice, tick); // conservative
+        var sl = TickMath.RoundUp(c.StopLossPrice ?? c.Signal.MandatorySlPrice, tick);       // tighter
+        var target = TickMath.RoundDown(c.TargetPrice ?? c.Signal.MandatoryTargetPrice, tick); // conservative
 
         var bracket = BracketRules.Validate(limit, sl, target);
         if (bracket.Count > 0)

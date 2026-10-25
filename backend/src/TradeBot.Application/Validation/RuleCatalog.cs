@@ -54,6 +54,8 @@ public static class RuleCatalog
         R(RuleCodes.TokenInvalid, RuleKind.Master, RuleScope.Account, "No valid Paytm Money token (expires within 15 min or login failed).", "mst.account_auth_tokens"),
         R(RuleCodes.MaxOpenTrades, RuleKind.Master, RuleScope.Account, "Maximum concurrent open trades reached.", "mst.account_risk_config.max_open_trades"),
         R(RuleCodes.DuplicateSignal, RuleKind.Master, RuleScope.Account, "An order already exists for this signal on this account.", "trn.orders"),
+        R(RuleCodes.MaxTradesPerDay, RuleKind.Master, RuleScope.Account, "Daily trade count limit reached.", "mst.account_risk_config.max_trades_per_day"),
+        R(RuleCodes.ReentryCooldown, RuleKind.Master, RuleScope.Account, "Re-entry cooldown after a stop-loss exit on this instrument.", "mst.account_risk_config.reentry_cooldown_minutes"),
         R(RuleCodes.ToggleBlockedOpenTrades, RuleKind.Master, RuleScope.ModeToggle, "Mode can only change while the account has no open trades.", "trn.daily_trades"),
 
         // ---- Master: instrument / strategy ----
@@ -124,6 +126,8 @@ public static class RuleCodes
     public const string TokenInvalid = "MS_TOKEN_INVALID";
     public const string MaxOpenTrades = "MS_MAX_OPEN_TRADES";
     public const string DuplicateSignal = "MS_DUPLICATE_SIGNAL";
+    public const string MaxTradesPerDay = "MS_MAX_TRADES_PER_DAY";
+    public const string ReentryCooldown = "MS_REENTRY_COOLDOWN";
     public const string ToggleBlockedOpenTrades = "MS_TOGGLE_BLOCKED_OPEN_TRADES";
     public const string InstrumentNotTradable = "MS_INSTRUMENT_NOT_TRADABLE";
     public const string SecurityInactive = "MS_SECURITY_INACTIVE";

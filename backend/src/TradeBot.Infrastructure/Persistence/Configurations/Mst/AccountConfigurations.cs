@@ -65,6 +65,7 @@ internal sealed class AccountRiskConfigConfiguration : IEntityTypeConfiguration<
             t.HasCheckConstraint("ck_account_risk_config_daily_limits", "max_daily_loss > 0 AND max_daily_loss <= allocated_capital AND max_daily_profit > 0");
             t.HasCheckConstraint("ck_account_risk_config_sizing", "max_open_trades >= 1 AND max_lots_per_trade >= 1 AND lot_multiplier > 0 AND lot_multiplier <= 1");
             t.HasCheckConstraint("ck_account_risk_config_confidence", "min_pattern_confidence BETWEEN 0 AND 100");
+            t.HasCheckConstraint("ck_account_risk_config_trade_pacing", "max_trades_per_day BETWEEN 1 AND 100 AND reentry_cooldown_minutes BETWEEN 0 AND 240");
             t.HasCheckConstraint("ck_account_risk_config_costs", "slippage_buffer_pct BETWEEN 0 AND 5 AND simulated_slippage_pct BETWEEN 0 AND 5 AND simulated_brokerage_per_order >= 0");
         });
 

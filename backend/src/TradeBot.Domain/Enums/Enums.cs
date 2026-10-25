@@ -88,3 +88,5 @@ public enum ExpiryPolicy { NearestSkipExpiryDay, Nearest, MonthlyOnly }
 public enum AlertChannelType { Telegram, Email }
 
 public enum EventSeverity { Info, Warning, Critical }
+
+public enum WatchlistSource { Index, Premarket, VolumeSpike, News }

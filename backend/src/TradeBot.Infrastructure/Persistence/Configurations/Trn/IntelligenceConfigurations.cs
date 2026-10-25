@@ -130,3 +130,17 @@ internal sealed class SignalConfiguration : IEntityTypeConfiguration<Signal>
         b.HasOne(x => x.Security).WithMany().HasForeignKey(x => x.SecurityId);
     }
 }
+
+internal sealed class DailyWatchlistConfiguration : IEntityTypeConfiguration<DailyWatchlist>
+{
+    public void Configure(EntityTypeBuilder<DailyWatchlist> b)
+    {
+        b.ToTable("daily_watchlist", Schemas.Trn);
+        b.HasKey(x => x.WatchlistId);
+        b.Property(x => x.Score).HasPrecision(7, 2);
+        b.Property(x => x.Reason).HasMaxLength(300);
+        b.Property(x => x.AddedAt).HasDefaultValueSql("now()");
+        b.HasIndex(x => new { x.TradingDate, x.InstrumentId }).IsUnique();
+        b.HasOne(x => x.Instrument).WithMany().HasForeignKey(x => x.InstrumentId);
+    }
+}

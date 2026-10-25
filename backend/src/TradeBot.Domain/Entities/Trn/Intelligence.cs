@@ -116,3 +116,17 @@ public class Signal
     public Instrument Instrument { get; set; } = null!;
     public SecurityMaster Security { get; set; } = null!;
 }
+
+public class DailyWatchlist
+{
+    public long WatchlistId { get; set; }
+    public DateOnly TradingDate { get; set; }
+    public long InstrumentId { get; set; }
+    public WatchlistSource Source { get; set; }
+    public decimal Score { get; set; }
+    public string? Reason { get; set; }
+    public bool IsActive { get; set; } = true;
+    public DateTime AddedAt { get; set; }
+
+    public Instrument Instrument { get; set; } = null!;
+}

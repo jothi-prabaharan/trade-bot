@@ -37,12 +37,16 @@ internal sealed class StrategyConfigConfiguration : IEntityTypeConfiguration<Str
                 "entry_start_time >= TIME '09:15' AND entry_cutoff_time > entry_start_time AND square_off_time > entry_cutoff_time AND square_off_time <= TIME '15:29'");
             t.HasCheckConstraint("ck_strategy_config_auth", "auth_login_time < entry_start_time AND auth_max_retries BETWEEN 0 AND 10");
             t.HasCheckConstraint("ck_strategy_config_confidence", "min_combined_confidence BETWEEN 0 AND 100");
+            t.HasCheckConstraint("ck_strategy_config_execution",
+                "sl_limit_buffer_pct > 0 AND sl_limit_buffer_pct <= 10 AND sl_gap_fallback_seconds BETWEEN 1 AND 30 AND entry_fill_timeout_seconds BETWEEN 2 AND 60");
+            t.HasCheckConstraint("ck_strategy_config_universe", "stock_watchlist_size BETWEEN 0 AND 50 AND history_backfill_days BETWEEN 1 AND 30");
             t.HasCheckConstraint("ck_strategy_config_timeframes",
                 "array_position(ARRAY['1m','3m','5m','15m','1h','1d'], trend_timeframe::text) > array_position(ARRAY['1m','3m','5m','15m','1h','1d'], trigger_timeframe::text)");
         });
 
         b.HasKey(x => x.StrategyConfigId);
         b.Property(x => x.MinCombinedConfidence).Score();
+        b.Property(x => x.SlLimitBufferPct).Pct();
         b.HasIndex(x => x.IsActive).IsUnique().HasFilter("is_active").HasDatabaseName("ux_strategy_config_single_active");
     }
 }

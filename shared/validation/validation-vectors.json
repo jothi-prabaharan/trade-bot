@@ -123,7 +123,9 @@
         "blockTradeOnOpposingNews": true,
         "slippageBufferPct": 0.5,
         "simulatedSlippagePct": 0.25,
-        "simulatedBrokeragePerOrder": 20
+        "simulatedBrokeragePerOrder": 20,
+        "maxTradesPerDay": 3,
+        "reentryCooldownMinutes": 15
       },
       "cases": [
         {
@@ -361,6 +363,31 @@
           },
           "expect": [
             "blockTradeOnOpposingNews:FIELD_TYPE"
+          ]
+        },
+        {
+          "name": "zero trades per day",
+          "patch": {
+            "maxTradesPerDay": 0
+          },
+          "expect": [
+            "maxTradesPerDay:FIELD_MIN"
+          ]
+        },
+        {
+          "name": "cooldown disabled",
+          "patch": {
+            "reentryCooldownMinutes": 0
+          },
+          "expect": []
+        },
+        {
+          "name": "cooldown above 4 hours",
+          "patch": {
+            "reentryCooldownMinutes": 241
+          },
+          "expect": [
+            "reentryCooldownMinutes:FIELD_MAX"
           ]
         }
       ]
@@ -623,7 +650,12 @@
         "entryCutoffTime": "14:45",
         "squareOffTime": "15:15",
         "authLoginTime": "08:45",
-        "authMaxRetries": 3
+        "authMaxRetries": 3,
+        "slLimitBufferPct": 2,
+        "slGapFallbackSeconds": 2,
+        "entryFillTimeoutSeconds": 10,
+        "stockWatchlistSize": 20,
+        "historyBackfillDays": 5
       },
       "cases": [
         {
@@ -717,6 +749,65 @@
           },
           "expect": [
             "product:FIELD_ENUM"
+          ]
+        },
+        {
+          "name": "zero sl-l buffer",
+          "patch": {
+            "slLimitBufferPct": 0
+          },
+          "expect": [
+            "slLimitBufferPct:FIELD_MIN"
+          ]
+        },
+        {
+          "name": "sl-l buffer 10%",
+          "patch": {
+            "slLimitBufferPct": 10
+          },
+          "expect": []
+        },
+        {
+          "name": "gap fallback too slow",
+          "patch": {
+            "slGapFallbackSeconds": 31
+          },
+          "expect": [
+            "slGapFallbackSeconds:FIELD_MAX"
+          ]
+        },
+        {
+          "name": "entry timeout too short",
+          "patch": {
+            "entryFillTimeoutSeconds": 1
+          },
+          "expect": [
+            "entryFillTimeoutSeconds:FIELD_MIN"
+          ]
+        },
+        {
+          "name": "index-only universe",
+          "patch": {
+            "stockWatchlistSize": 0
+          },
+          "expect": []
+        },
+        {
+          "name": "watchlist too large",
+          "patch": {
+            "stockWatchlistSize": 51
+          },
+          "expect": [
+            "stockWatchlistSize:FIELD_MAX"
+          ]
+        },
+        {
+          "name": "no backfill days",
+          "patch": {
+            "historyBackfillDays": 0
+          },
+          "expect": [
+            "historyBackfillDays:FIELD_MIN"
           ]
         }
       ]

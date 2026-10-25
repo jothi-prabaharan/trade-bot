@@ -39,6 +39,7 @@ public class TradeBotDbContext(DbContextOptions<TradeBotDbContext> options, ISec
     public DbSet<DailyAccountPnl> DailyAccountPnls => Set<DailyAccountPnl>();
     public DbSet<DailyBotState> DailyBotStates => Set<DailyBotState>();
     public DbSet<SystemEvent> SystemEvents => Set<SystemEvent>();
+    public DbSet<DailyWatchlist> DailyWatchlists => Set<DailyWatchlist>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

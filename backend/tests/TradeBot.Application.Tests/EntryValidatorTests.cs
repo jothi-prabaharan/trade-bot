@@ -177,3 +177,29 @@ public sealed class EntryValidatorTests
         Assert.Null(d.Sizing);
     }
 }
+
+public sealed class TradePacingTests
+{
+    [Fact]
+    public void Daily_trade_cap()
+    {
+        var d = EntryValidator.Validate(EntryContextBuilder.Valid() with { TradesToday = 3 });
+        Assert.Contains(d.Violations, v => v.Code == RuleCodes.MaxTradesPerDay);
+    }
+
+    [Fact]
+    public void Reentry_cooldown_blocks_for_15_minutes()
+    {
+        var blocked = EntryValidator.Validate(EntryContextBuilder.Valid() with { LastStopOutOnInstrumentUtc = EntryContextBuilder.NowUtc.AddMinutes(-14) });
+        Assert.Contains(blocked.Violations, v => v.Code == RuleCodes.ReentryCooldown);
+        var allowed = EntryValidator.Validate(EntryContextBuilder.Valid() with { LastStopOutOnInstrumentUtc = EntryContextBuilder.NowUtc.AddMinutes(-15) });
+        Assert.True(allowed.IsApproved);
+    }
+
+    [Fact]
+    public void Account_bracket_override_is_used_for_sizing()
+    {
+        var s = EntryValidator.Validate(EntryContextBuilder.Valid() with { StopLossPrice = 90, TargetPrice = 125 }).Sizing!;
+        Assert.Equal((90m, 125m), (s.StopLossPrice, s.TargetPrice));
+    }
+}
