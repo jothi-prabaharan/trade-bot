@@ -12,6 +12,7 @@ public class Instrument : AuditableEntity
     public Exchange Exchange { get; set; } = Exchange.Nse;
     public Segment Segment { get; set; } = Segment.Derivatives;
     public int LotSize { get; set; }
+    public int FreezeQuantity { get; set; }
     public decimal TickSize { get; set; }
     public decimal? StrikeStep { get; set; }
     public long? UnderlyingSecurityId { get; set; }
@@ -84,4 +85,15 @@ public class ChargeRate : AuditableEntity
     public decimal SebiFeePct { get; set; }
     public decimal StampDutyBuyPct { get; set; }
     public decimal GstPct { get; set; }
+}
+
+public class MarketHoliday : AuditableEntity
+{
+    public long HolidayId { get; set; }
+    public DateOnly HolidayDate { get; set; }
+    public Exchange Exchange { get; set; } = Exchange.Nse;
+    public required string Description { get; set; }
+    public bool IsSpecialSession { get; set; }
+    public TimeOnly? SessionOpenTime { get; set; }
+    public TimeOnly? SessionCloseTime { get; set; }
 }

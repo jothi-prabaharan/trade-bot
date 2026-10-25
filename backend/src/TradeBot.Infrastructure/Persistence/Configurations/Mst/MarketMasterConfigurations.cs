@@ -11,6 +11,7 @@ internal sealed class InstrumentConfiguration : IEntityTypeConfiguration<Instrum
         b.ToTable("instruments", Schemas.Mst, t =>
         {
             t.HasCheckConstraint("ck_instruments_lot_tick", "lot_size > 0 AND tick_size > 0");
+            t.HasCheckConstraint("ck_instruments_freeze_quantity", "freeze_quantity >= lot_size");
             t.HasCheckConstraint("ck_instruments_strike_step", "strike_step IS NULL OR strike_step > 0");
         });
 
@@ -103,5 +104,20 @@ internal sealed class ChargeRateConfiguration : IEntityTypeConfiguration<ChargeR
         b.Property(x => x.StampDutyBuyPct).HasPrecision(9, 6);
         b.Property(x => x.GstPct).HasPrecision(9, 6);
         b.HasIndex(x => new { x.SecurityType, x.EffectiveFrom }).IsUnique();
+    }
+}
+
+internal sealed class MarketHolidayConfiguration : IEntityTypeConfiguration<MarketHoliday>
+{
+    public void Configure(EntityTypeBuilder<MarketHoliday> b)
+    {
+        b.ToTable("market_holidays", Schemas.Mst, t =>
+            t.HasCheckConstraint("ck_market_holidays_special_session",
+                "(is_special_session AND session_open_time IS NOT NULL AND session_close_time IS NOT NULL AND session_open_time < session_close_time) OR " +
+                "(NOT is_special_session AND session_open_time IS NULL AND session_close_time IS NULL)"));
+
+        b.HasKey(x => x.HolidayId);
+        b.Property(x => x.Description).HasMaxLength(200);
+        b.HasIndex(x => new { x.Exchange, x.HolidayDate }).IsUnique();
     }
 }

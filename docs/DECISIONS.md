@@ -63,3 +63,15 @@
 | Session | Entries 09:15–14:45 IST; time square-off 15:15 IST |
 | Auth | 08:45 IST headless Playwright + TOTP, 3 retries, then Telegram alert + manual token paste on dashboard |
 | Alerts | Telegram |
+
+## Phase 2 — Validation
+| Item | Decision |
+|---|---|
+| Holiday calendar | `mst.market_holidays` table (holidays + special sessions) |
+| Stale tick | Block entries when option LTP is older than 3 s (fixed) |
+| News-veto window | Whole trading session since the 08:30 pre-market scan |
+| Over-sized signals | Auto-downsize to the largest passing lot count; reject below 1 lot |
+| Config sanity bounds | Fixed in code + DB CHECK |
+| UI parity | `GET /api/validation/rules` + shared JSON test vectors |
+| PAPER validation | Identical to REAL except broker-only rules (credentials, token) |
+| Freeze quantity | `mst.instruments.freeze_quantity`, cap/reject (no slicing) |

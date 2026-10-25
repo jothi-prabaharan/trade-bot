@@ -6,9 +6,11 @@ Multi-account AI options trading bot for Paytm Money (PAPER + REAL), powered by 
 |---|---|
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Phase 0 configuration decisions |
 | [docs/PHASE1_SCHEMA.md](docs/PHASE1_SCHEMA.md) | Phase 1 database schema and constraints |
+| [docs/PHASE2_VALIDATION.md](docs/PHASE2_VALIDATION.md) | Phase 2 validation rules matrix |
 
 ```
-backend/   .NET solution (Domain, Infrastructure + EF Core migrations, tests)
+backend/   .NET solution (Domain, Application validation, Infrastructure + EF Core migrations, tests)
 db/        Generated SQL migration scripts
+shared/    Cross-stack artifacts (validation test vectors used by backend and Angular)
 docs/      Design documents
 ```

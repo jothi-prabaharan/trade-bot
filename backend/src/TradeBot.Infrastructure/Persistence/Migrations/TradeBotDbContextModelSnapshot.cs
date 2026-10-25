@@ -267,7 +267,7 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_account_risk_config_risk_pct", "risk_per_trade_pct > 0 AND risk_per_trade_pct <= 10");
 
-                            t.HasCheckConstraint("ck_account_risk_config_sizing", "max_open_trades >= 1 AND max_lots_per_trade >= 1 AND lot_multiplier > 0");
+                            t.HasCheckConstraint("ck_account_risk_config_sizing", "max_open_trades >= 1 AND max_lots_per_trade >= 1 AND lot_multiplier > 0 AND lot_multiplier <= 1");
 
                             t.HasCheckConstraint("ck_account_risk_config_sl_target", "default_sl_pct > 0 AND default_sl_pct < 100 AND default_target_pct > 0 AND max_sl_pct >= default_sl_pct AND max_sl_pct < 100");
 
@@ -612,6 +612,8 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_gemini_news_config_polling", "intraday_poll_seconds >= 10 AND volume_spike_trigger_multiplier > 1 AND max_calls_per_minute >= 1");
 
+                            t.HasCheckConstraint("ck_gemini_news_config_premarket_time", "premarket_scan_time < TIME '09:15'");
+
                             t.HasCheckConstraint("ck_gemini_news_config_veto_min_impact_level", "veto_min_impact_level IN ('LOW', 'MEDIUM', 'HIGH', 'EXTREME_HALT')");
 
                             t.HasCheckConstraint("ck_gemini_news_config_weights_range", "pattern_weight_pct BETWEEN 0 AND 100 AND news_weight_pct BETWEEN 0 AND 100 AND oi_greeks_weight_pct BETWEEN 0 AND 100");
@@ -640,6 +642,10 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
                         .HasMaxLength(3)
                         .HasColumnType("character varying(3)")
                         .HasColumnName("exchange");
+
+                    b.Property<int>("FreezeQuantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("freeze_quantity");
 
                     b.Property<bool>("HasWeeklyExpiry")
                         .HasColumnType("boolean")
@@ -715,6 +721,8 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_instruments_exchange", "exchange IN ('NSE', 'BSE')");
 
+                            t.HasCheckConstraint("ck_instruments_freeze_quantity", "freeze_quantity >= lot_size");
+
                             t.HasCheckConstraint("ck_instruments_instrument_type", "instrument_type IN ('INDEX', 'STOCK')");
 
                             t.HasCheckConstraint("ck_instruments_lot_tick", "lot_size > 0 AND tick_size > 0");
@@ -722,6 +730,70 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_instruments_segment", "segment IN ('D', 'E')");
 
                             t.HasCheckConstraint("ck_instruments_strike_step", "strike_step IS NULL OR strike_step > 0");
+                        });
+                });
+
+            modelBuilder.Entity("TradeBot.Domain.Entities.Mst.MarketHoliday", b =>
+                {
+                    b.Property<long>("HolidayId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("holiday_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("HolidayId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Exchange")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("exchange");
+
+                    b.Property<DateOnly>("HolidayDate")
+                        .HasColumnType("date")
+                        .HasColumnName("holiday_date");
+
+                    b.Property<bool>("IsSpecialSession")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_special_session");
+
+                    b.Property<TimeOnly?>("SessionCloseTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("session_close_time");
+
+                    b.Property<TimeOnly?>("SessionOpenTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("session_open_time");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.HasKey("HolidayId")
+                        .HasName("pk_market_holidays");
+
+                    b.HasIndex("Exchange", "HolidayDate")
+                        .IsUnique()
+                        .HasDatabaseName("ix_market_holidays_exchange_holiday_date");
+
+                    b.ToTable("market_holidays", "mst", t =>
+                        {
+                            t.HasCheckConstraint("ck_market_holidays_exchange", "exchange IN ('NSE', 'BSE')");
+
+                            t.HasCheckConstraint("ck_market_holidays_special_session", "(is_special_session AND session_open_time IS NOT NULL AND session_close_time IS NOT NULL AND session_open_time < session_close_time) OR (NOT is_special_session AND session_open_time IS NULL AND session_close_time IS NULL)");
                         });
                 });
 
@@ -1009,7 +1081,7 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_strategy_config_strike_selection", "strike_selection IN ('ATM', 'ITM1', 'OTM1', 'DELTA_TARGET')");
 
-                            t.HasCheckConstraint("ck_strategy_config_timeframes", "trend_timeframe <> trigger_timeframe");
+                            t.HasCheckConstraint("ck_strategy_config_timeframes", "array_position(ARRAY['1m','3m','5m','15m','1h','1d'], trend_timeframe::text) > array_position(ARRAY['1m','3m','5m','15m','1h','1d'], trigger_timeframe::text)");
 
                             t.HasCheckConstraint("ck_strategy_config_trend_timeframe", "trend_timeframe IN ('1m', '3m', '5m', '15m', '1h', '1d')");
 

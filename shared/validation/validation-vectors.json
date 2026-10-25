@@ -1,0 +1,920 @@
+{
+  "$comment": "Shared validation test vectors. Run by backend (xUnit) and frontend (Angular) test suites; both must produce exactly 'expect'. Field errors are 'field:CODE', cross-field errors are 'CODE'.",
+  "bracket": [
+    {
+      "name": "valid long bracket",
+      "entry": 100,
+      "stopLoss": 85,
+      "target": 130,
+      "expect": []
+    },
+    {
+      "name": "missing stop-loss",
+      "entry": 100,
+      "stopLoss": null,
+      "target": 130,
+      "expect": [
+        "stopLossPrice:FX_SL_REQUIRED"
+      ]
+    },
+    {
+      "name": "missing target",
+      "entry": 100,
+      "stopLoss": 85,
+      "target": null,
+      "expect": [
+        "targetSellPrice:FX_TARGET_REQUIRED"
+      ]
+    },
+    {
+      "name": "missing both",
+      "entry": 100,
+      "stopLoss": null,
+      "target": null,
+      "expect": [
+        "stopLossPrice:FX_SL_REQUIRED",
+        "targetSellPrice:FX_TARGET_REQUIRED"
+      ]
+    },
+    {
+      "name": "zero stop-loss",
+      "entry": 100,
+      "stopLoss": 0,
+      "target": 130,
+      "expect": [
+        "stopLossPrice:FX_SL_NOT_POSITIVE"
+      ]
+    },
+    {
+      "name": "negative stop-loss",
+      "entry": 100,
+      "stopLoss": -5,
+      "target": 130,
+      "expect": [
+        "stopLossPrice:FX_SL_NOT_POSITIVE"
+      ]
+    },
+    {
+      "name": "stop-loss equals entry",
+      "entry": 100,
+      "stopLoss": 100,
+      "target": 130,
+      "expect": [
+        "stopLossPrice:FX_SL_NOT_BELOW_ENTRY"
+      ]
+    },
+    {
+      "name": "stop-loss above entry",
+      "entry": 100,
+      "stopLoss": 105,
+      "target": 130,
+      "expect": [
+        "stopLossPrice:FX_SL_NOT_BELOW_ENTRY"
+      ]
+    },
+    {
+      "name": "target equals entry",
+      "entry": 100,
+      "stopLoss": 85,
+      "target": 100,
+      "expect": [
+        "targetSellPrice:FX_TARGET_NOT_ABOVE_ENTRY"
+      ]
+    },
+    {
+      "name": "target below stop-loss",
+      "entry": 100,
+      "stopLoss": 85,
+      "target": 80,
+      "expect": [
+        "targetSellPrice:FX_TARGET_NOT_ABOVE_ENTRY"
+      ]
+    },
+    {
+      "name": "tick-sized bracket",
+      "entry": 100.05,
+      "stopLoss": 99.95,
+      "target": 100.25,
+      "expect": []
+    }
+  ],
+  "forms": {
+    "riskConfig": {
+      "base": {
+        "allocatedCapital": 100000,
+        "openingBalance": 100000,
+        "availableMargin": 100000,
+        "utilisedMargin": 0,
+        "riskPerTradePct": 2,
+        "minSingleTradePrice": 30,
+        "maxSingleTradePrice": 400,
+        "defaultSlPct": 15,
+        "defaultTargetPct": 30,
+        "minRiskRewardRatio": 2,
+        "maxSlPct": 25,
+        "breakevenTriggerPct": 50,
+        "trailingSlStepPct": 10,
+        "maxDailyLoss": 3000,
+        "maxDailyProfit": 6000,
+        "maxOpenTrades": 1,
+        "maxLotsPerTrade": 10,
+        "lotMultiplier": 1,
+        "minPatternConfidence": 70,
+        "blockTradeOnOpposingNews": true,
+        "slippageBufferPct": 0.5,
+        "simulatedSlippagePct": 0.25,
+        "simulatedBrokeragePerOrder": 20
+      },
+      "cases": [
+        {
+          "name": "phase 0 defaults are valid",
+          "patch": {},
+          "expect": []
+        },
+        {
+          "name": "risk 10% boundary allowed",
+          "patch": {
+            "riskPerTradePct": 10
+          },
+          "expect": []
+        },
+        {
+          "name": "risk above 10%",
+          "patch": {
+            "riskPerTradePct": 10.5
+          },
+          "expect": [
+            "riskPerTradePct:FIELD_MAX"
+          ]
+        },
+        {
+          "name": "risk zero",
+          "patch": {
+            "riskPerTradePct": 0
+          },
+          "expect": [
+            "riskPerTradePct:FIELD_MIN"
+          ]
+        },
+        {
+          "name": "risk missing",
+          "patch": {
+            "riskPerTradePct": null
+          },
+          "expect": [
+            "riskPerTradePct:FIELD_REQUIRED"
+          ]
+        },
+        {
+          "name": "risk as string",
+          "patch": {
+            "riskPerTradePct": "2"
+          },
+          "expect": [
+            "riskPerTradePct:FIELD_TYPE"
+          ]
+        },
+        {
+          "name": "risk too many decimals",
+          "patch": {
+            "riskPerTradePct": 2.12345
+          },
+          "expect": [
+            "riskPerTradePct:FIELD_SCALE"
+          ]
+        },
+        {
+          "name": "premium max equals min",
+          "patch": {
+            "maxSingleTradePrice": 30
+          },
+          "expect": [
+            "CX_PREMIUM_BAND"
+          ]
+        },
+        {
+          "name": "fallback target below sl x rr",
+          "patch": {
+            "defaultTargetPct": 20
+          },
+          "expect": [
+            "CX_FALLBACK_RR"
+          ]
+        },
+        {
+          "name": "fallback exactly 1:2",
+          "patch": {
+            "defaultSlPct": 20,
+            "defaultTargetPct": 40
+          },
+          "expect": []
+        },
+        {
+          "name": "max sl below default sl",
+          "patch": {
+            "maxSlPct": 10
+          },
+          "expect": [
+            "CX_MAX_SL_GTE_DEFAULT_SL"
+          ]
+        },
+        {
+          "name": "daily loss above capital",
+          "patch": {
+            "maxDailyLoss": 100001
+          },
+          "expect": [
+            "CX_DAILY_LOSS_LTE_CAPITAL"
+          ]
+        },
+        {
+          "name": "daily loss equals capital",
+          "patch": {
+            "maxDailyLoss": 100000
+          },
+          "expect": []
+        },
+        {
+          "name": "lot multiplier above 1",
+          "patch": {
+            "lotMultiplier": 1.5
+          },
+          "expect": [
+            "lotMultiplier:FIELD_MAX"
+          ]
+        },
+        {
+          "name": "lot multiplier zero",
+          "patch": {
+            "lotMultiplier": 0
+          },
+          "expect": [
+            "lotMultiplier:FIELD_MIN"
+          ]
+        },
+        {
+          "name": "lot multiplier half",
+          "patch": {
+            "lotMultiplier": 0.5
+          },
+          "expect": []
+        },
+        {
+          "name": "fractional max open trades",
+          "patch": {
+            "maxOpenTrades": 1.5
+          },
+          "expect": [
+            "maxOpenTrades:FIELD_TYPE"
+          ]
+        },
+        {
+          "name": "zero max open trades",
+          "patch": {
+            "maxOpenTrades": 0
+          },
+          "expect": [
+            "maxOpenTrades:FIELD_MIN"
+          ]
+        },
+        {
+          "name": "slippage above 5%",
+          "patch": {
+            "slippageBufferPct": 5.01
+          },
+          "expect": [
+            "slippageBufferPct:FIELD_MAX"
+          ]
+        },
+        {
+          "name": "slippage zero allowed",
+          "patch": {
+            "slippageBufferPct": 0
+          },
+          "expect": []
+        },
+        {
+          "name": "default sl 100% (cross rules on it skipped)",
+          "patch": {
+            "defaultSlPct": 100
+          },
+          "expect": [
+            "defaultSlPct:FIELD_MAX"
+          ]
+        },
+        {
+          "name": "min rr below 1",
+          "patch": {
+            "minRiskRewardRatio": 0.5
+          },
+          "expect": [
+            "minRiskRewardRatio:FIELD_MIN"
+          ]
+        },
+        {
+          "name": "breakeven 100% allowed",
+          "patch": {
+            "breakevenTriggerPct": 100
+          },
+          "expect": []
+        },
+        {
+          "name": "trailing step 100%",
+          "patch": {
+            "trailingSlStepPct": 100
+          },
+          "expect": [
+            "trailingSlStepPct:FIELD_MAX"
+          ]
+        },
+        {
+          "name": "pattern confidence above 100",
+          "patch": {
+            "minPatternConfidence": 101
+          },
+          "expect": [
+            "minPatternConfidence:FIELD_MAX"
+          ]
+        },
+        {
+          "name": "negative simulated brokerage",
+          "patch": {
+            "simulatedBrokeragePerOrder": -1
+          },
+          "expect": [
+            "simulatedBrokeragePerOrder:FIELD_MIN"
+          ]
+        },
+        {
+          "name": "zero capital",
+          "patch": {
+            "allocatedCapital": 0
+          },
+          "expect": [
+            "allocatedCapital:FIELD_MIN"
+          ]
+        },
+        {
+          "name": "news veto flag as string",
+          "patch": {
+            "blockTradeOnOpposingNews": "yes"
+          },
+          "expect": [
+            "blockTradeOnOpposingNews:FIELD_TYPE"
+          ]
+        }
+      ]
+    },
+    "tradingAccount": {
+      "base": {
+        "accountName": "Real Primary",
+        "clientId": "PM12345",
+        "userName": "Test User",
+        "email": "trader@example.in",
+        "phone": "9876543210",
+        "brokerBranch": null,
+        "loginId": "9876543210",
+        "totpSecret": "JBSWY3DPEHPK3PXP",
+        "isDataProvider": false,
+        "isActive": true,
+        "apiKey": null,
+        "apiSecret": null
+      },
+      "cases": [
+        {
+          "name": "valid paper account",
+          "patch": {},
+          "expect": []
+        },
+        {
+          "name": "client id with space",
+          "patch": {
+            "clientId": "PM 123"
+          },
+          "expect": [
+            "clientId:FIELD_PATTERN"
+          ]
+        },
+        {
+          "name": "bad email",
+          "patch": {
+            "email": "trader-at-example"
+          },
+          "expect": [
+            "email:FIELD_PATTERN"
+          ]
+        },
+        {
+          "name": "short phone",
+          "patch": {
+            "phone": "12345"
+          },
+          "expect": [
+            "phone:FIELD_PATTERN"
+          ]
+        },
+        {
+          "name": "empty optional phone",
+          "patch": {
+            "phone": ""
+          },
+          "expect": []
+        },
+        {
+          "name": "lowercase totp secret",
+          "patch": {
+            "totpSecret": "jbswy3dpehpk3pxp"
+          },
+          "expect": [
+            "totpSecret:FIELD_PATTERN"
+          ]
+        },
+        {
+          "name": "missing account name",
+          "patch": {
+            "accountName": ""
+          },
+          "expect": [
+            "accountName:FIELD_REQUIRED"
+          ]
+        },
+        {
+          "name": "account name too long",
+          "patch": {
+            "accountName": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "expect": [
+            "accountName:FIELD_MAX_LENGTH"
+          ]
+        },
+        {
+          "name": "data provider without credentials",
+          "patch": {
+            "isDataProvider": true
+          },
+          "expect": [
+            "CX_DATA_PROVIDER_CREDENTIALS"
+          ]
+        },
+        {
+          "name": "data provider with stored credentials",
+          "patch": {
+            "isDataProvider": true,
+            "hasApiKey": true,
+            "hasApiSecret": true
+          },
+          "expect": []
+        },
+        {
+          "name": "data provider with new credentials",
+          "patch": {
+            "isDataProvider": true,
+            "apiKey": "k",
+            "apiSecret": "s"
+          },
+          "expect": []
+        },
+        {
+          "name": "data provider with key only",
+          "patch": {
+            "isDataProvider": true,
+            "apiKey": "k"
+          },
+          "expect": [
+            "CX_DATA_PROVIDER_CREDENTIALS"
+          ]
+        },
+        {
+          "name": "inactive data provider without credentials",
+          "patch": {
+            "isDataProvider": true,
+            "isActive": false
+          },
+          "expect": []
+        }
+      ]
+    },
+    "geminiConfig": {
+      "base": {
+        "modelName": "gemini-flash-latest",
+        "useSearchGrounding": true,
+        "premarketScanTime": "08:30",
+        "intradayPollSeconds": 60,
+        "volumeSpikeTriggerMultiplier": 2.5,
+        "patternWeightPct": 50,
+        "newsWeightPct": 30,
+        "oiGreeksWeightPct": 20,
+        "vetoMinImpactLevel": "HIGH",
+        "autoPauseOnExtremeMacro": true,
+        "maxCallsPerMinute": 30
+      },
+      "cases": [
+        {
+          "name": "phase 0 defaults are valid",
+          "patch": {},
+          "expect": []
+        },
+        {
+          "name": "time with seconds",
+          "patch": {
+            "premarketScanTime": "08:30:00"
+          },
+          "expect": []
+        },
+        {
+          "name": "weights sum 110",
+          "patch": {
+            "oiGreeksWeightPct": 30
+          },
+          "expect": [
+            "CX_WEIGHTS_SUM_100"
+          ]
+        },
+        {
+          "name": "weights 40/40/20",
+          "patch": {
+            "patternWeightPct": 40,
+            "newsWeightPct": 40
+          },
+          "expect": []
+        },
+        {
+          "name": "pre-market after open",
+          "patch": {
+            "premarketScanTime": "09:20"
+          },
+          "expect": [
+            "CX_PREMARKET_BEFORE_OPEN"
+          ]
+        },
+        {
+          "name": "pre-market at open",
+          "patch": {
+            "premarketScanTime": "09:15"
+          },
+          "expect": [
+            "CX_PREMARKET_BEFORE_OPEN"
+          ]
+        },
+        {
+          "name": "12-hour time format",
+          "patch": {
+            "premarketScanTime": "8:30 AM"
+          },
+          "expect": [
+            "premarketScanTime:FIELD_TYPE"
+          ]
+        },
+        {
+          "name": "poll too fast",
+          "patch": {
+            "intradayPollSeconds": 5
+          },
+          "expect": [
+            "intradayPollSeconds:FIELD_MIN"
+          ]
+        },
+        {
+          "name": "spike multiplier 1",
+          "patch": {
+            "volumeSpikeTriggerMultiplier": 1
+          },
+          "expect": [
+            "volumeSpikeTriggerMultiplier:FIELD_MIN"
+          ]
+        },
+        {
+          "name": "unknown impact level",
+          "patch": {
+            "vetoMinImpactLevel": "SEVERE"
+          },
+          "expect": [
+            "vetoMinImpactLevel:FIELD_ENUM"
+          ]
+        },
+        {
+          "name": "veto on extreme only",
+          "patch": {
+            "vetoMinImpactLevel": "EXTREME_HALT"
+          },
+          "expect": []
+        },
+        {
+          "name": "model name with spaces",
+          "patch": {
+            "modelName": "Gemini Flash"
+          },
+          "expect": [
+            "modelName:FIELD_PATTERN"
+          ]
+        }
+      ]
+    },
+    "strategyConfig": {
+      "base": {
+        "strikeSelection": "ATM",
+        "expiryPolicy": "NEAREST_SKIP_EXPIRY_DAY",
+        "product": "I",
+        "trendTimeframe": "15m",
+        "triggerTimeframe": "5m",
+        "requireOptionConfirmation": true,
+        "minCombinedConfidence": 70,
+        "entryStartTime": "09:15",
+        "entryCutoffTime": "14:45",
+        "squareOffTime": "15:15",
+        "authLoginTime": "08:45",
+        "authMaxRetries": 3
+      },
+      "cases": [
+        {
+          "name": "phase 0 defaults are valid",
+          "patch": {},
+          "expect": []
+        },
+        {
+          "name": "entry before market open",
+          "patch": {
+            "entryStartTime": "09:10"
+          },
+          "expect": [
+            "CX_SESSION_TIMES"
+          ]
+        },
+        {
+          "name": "cutoff after square-off",
+          "patch": {
+            "entryCutoffTime": "15:20"
+          },
+          "expect": [
+            "CX_SESSION_TIMES"
+          ]
+        },
+        {
+          "name": "square-off 15:29 allowed",
+          "patch": {
+            "squareOffTime": "15:29"
+          },
+          "expect": []
+        },
+        {
+          "name": "square-off 15:30",
+          "patch": {
+            "squareOffTime": "15:30"
+          },
+          "expect": [
+            "CX_SESSION_TIMES"
+          ]
+        },
+        {
+          "name": "login after entry start",
+          "patch": {
+            "authLoginTime": "09:30"
+          },
+          "expect": [
+            "CX_AUTH_BEFORE_ENTRY"
+          ]
+        },
+        {
+          "name": "trend lower than trigger",
+          "patch": {
+            "trendTimeframe": "5m",
+            "triggerTimeframe": "15m"
+          },
+          "expect": [
+            "CX_TREND_TF_ABOVE_TRIGGER"
+          ]
+        },
+        {
+          "name": "trend equals trigger",
+          "patch": {
+            "trendTimeframe": "5m"
+          },
+          "expect": [
+            "CX_TREND_TF_ABOVE_TRIGGER"
+          ]
+        },
+        {
+          "name": "1h trend with 15m trigger",
+          "patch": {
+            "trendTimeframe": "1h",
+            "triggerTimeframe": "15m"
+          },
+          "expect": []
+        },
+        {
+          "name": "too many login retries",
+          "patch": {
+            "authMaxRetries": 11
+          },
+          "expect": [
+            "authMaxRetries:FIELD_MAX"
+          ]
+        },
+        {
+          "name": "unknown product",
+          "patch": {
+            "product": "X"
+          },
+          "expect": [
+            "product:FIELD_ENUM"
+          ]
+        }
+      ]
+    },
+    "chartPattern": {
+      "base": {
+        "patternCode": "BULLISH_ENGULFING",
+        "patternName": "Bullish Engulfing",
+        "category": "CANDLESTICK",
+        "direction": "BULLISH",
+        "minCandlesRequired": 2,
+        "defaultWeight": 60,
+        "requireVolumeConfirm": true,
+        "requireBreakoutClose": true,
+        "patternParameters": "{\"bodyRatio\":1.0}",
+        "isActive": true
+      },
+      "cases": [
+        {
+          "name": "valid pattern",
+          "patch": {},
+          "expect": []
+        },
+        {
+          "name": "lowercase code",
+          "patch": {
+            "patternCode": "bullish_engulfing"
+          },
+          "expect": [
+            "patternCode:FIELD_PATTERN"
+          ]
+        },
+        {
+          "name": "parameters is an array",
+          "patch": {
+            "patternParameters": "[1,2]"
+          },
+          "expect": [
+            "patternParameters:FIELD_TYPE"
+          ]
+        },
+        {
+          "name": "parameters not json",
+          "patch": {
+            "patternParameters": "{bad"
+          },
+          "expect": [
+            "patternParameters:FIELD_TYPE"
+          ]
+        },
+        {
+          "name": "zero candles",
+          "patch": {
+            "minCandlesRequired": 0
+          },
+          "expect": [
+            "minCandlesRequired:FIELD_MIN"
+          ]
+        },
+        {
+          "name": "weight above 100",
+          "patch": {
+            "defaultWeight": 100.5
+          },
+          "expect": [
+            "defaultWeight:FIELD_MAX"
+          ]
+        },
+        {
+          "name": "smc category",
+          "patch": {
+            "category": "SMC_STRUCTURE",
+            "direction": "BIDIRECTIONAL"
+          },
+          "expect": []
+        }
+      ]
+    },
+    "modeToggle": {
+      "base": {
+        "targetMode": "REAL",
+        "accountClientId": "PM12345",
+        "confirmClientId": "PM12345"
+      },
+      "cases": [
+        {
+          "name": "confirmed switch to real",
+          "patch": {},
+          "expect": []
+        },
+        {
+          "name": "wrong confirmation",
+          "patch": {
+            "confirmClientId": "PM99999"
+          },
+          "expect": [
+            "CX_REAL_CONFIRMATION"
+          ]
+        },
+        {
+          "name": "missing confirmation",
+          "patch": {
+            "confirmClientId": null
+          },
+          "expect": [
+            "CX_REAL_CONFIRMATION"
+          ]
+        },
+        {
+          "name": "confirmation with surrounding spaces",
+          "patch": {
+            "confirmClientId": " PM12345 "
+          },
+          "expect": []
+        },
+        {
+          "name": "switch to paper needs no confirmation",
+          "patch": {
+            "targetMode": "PAPER",
+            "confirmClientId": null
+          },
+          "expect": []
+        },
+        {
+          "name": "unknown mode",
+          "patch": {
+            "targetMode": "LIVE"
+          },
+          "expect": [
+            "targetMode:FIELD_ENUM"
+          ]
+        }
+      ]
+    },
+    "marketHoliday": {
+      "base": {
+        "holidayDate": "2026-12-25",
+        "exchange": "NSE",
+        "description": "Test holiday",
+        "isSpecialSession": false,
+        "sessionOpenTime": null,
+        "sessionCloseTime": null
+      },
+      "cases": [
+        {
+          "name": "regular holiday",
+          "patch": {},
+          "expect": []
+        },
+        {
+          "name": "special session without times",
+          "patch": {
+            "isSpecialSession": true
+          },
+          "expect": [
+            "CX_SPECIAL_SESSION_TIMES"
+          ]
+        },
+        {
+          "name": "special evening session",
+          "patch": {
+            "isSpecialSession": true,
+            "sessionOpenTime": "18:00",
+            "sessionCloseTime": "19:00"
+          },
+          "expect": []
+        },
+        {
+          "name": "special session reversed",
+          "patch": {
+            "isSpecialSession": true,
+            "sessionOpenTime": "19:00",
+            "sessionCloseTime": "18:00"
+          },
+          "expect": [
+            "CX_SPECIAL_SESSION_TIMES"
+          ]
+        },
+        {
+          "name": "holiday with session times",
+          "patch": {
+            "sessionOpenTime": "09:15",
+            "sessionCloseTime": "15:30"
+          },
+          "expect": [
+            "CX_SPECIAL_SESSION_TIMES"
+          ]
+        },
+        {
+          "name": "non-ISO date",
+          "patch": {
+            "holidayDate": "25-12-2026"
+          },
+          "expect": [
+            "holidayDate:FIELD_TYPE"
+          ]
+        }
+      ]
+    }
+  }
+}

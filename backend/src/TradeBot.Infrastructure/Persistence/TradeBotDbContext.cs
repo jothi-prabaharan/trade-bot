@@ -26,6 +26,7 @@ public class TradeBotDbContext(DbContextOptions<TradeBotDbContext> options, ISec
     public DbSet<GeminiNewsConfig> GeminiNewsConfigs => Set<GeminiNewsConfig>();
     public DbSet<StrategyConfig> StrategyConfigs => Set<StrategyConfig>();
     public DbSet<AlertChannel> AlertChannels => Set<AlertChannel>();
+    public DbSet<MarketHoliday> MarketHolidays => Set<MarketHoliday>();
 
     // trn
     public DbSet<CompanyDailyNews> CompanyDailyNews => Set<CompanyDailyNews>();

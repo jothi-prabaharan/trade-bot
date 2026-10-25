@@ -63,7 +63,7 @@ internal sealed class AccountRiskConfigConfiguration : IEntityTypeConfiguration<
             t.HasCheckConstraint("ck_account_risk_config_fallback_rr", "min_risk_reward_ratio >= 1 AND default_target_pct >= default_sl_pct * min_risk_reward_ratio");
             t.HasCheckConstraint("ck_account_risk_config_trailing", "breakeven_trigger_pct > 0 AND breakeven_trigger_pct <= 100 AND trailing_sl_step_pct > 0 AND trailing_sl_step_pct < 100");
             t.HasCheckConstraint("ck_account_risk_config_daily_limits", "max_daily_loss > 0 AND max_daily_loss <= allocated_capital AND max_daily_profit > 0");
-            t.HasCheckConstraint("ck_account_risk_config_sizing", "max_open_trades >= 1 AND max_lots_per_trade >= 1 AND lot_multiplier > 0");
+            t.HasCheckConstraint("ck_account_risk_config_sizing", "max_open_trades >= 1 AND max_lots_per_trade >= 1 AND lot_multiplier > 0 AND lot_multiplier <= 1");
             t.HasCheckConstraint("ck_account_risk_config_confidence", "min_pattern_confidence BETWEEN 0 AND 100");
             t.HasCheckConstraint("ck_account_risk_config_costs", "slippage_buffer_pct BETWEEN 0 AND 5 AND simulated_slippage_pct BETWEEN 0 AND 5 AND simulated_brokerage_per_order >= 0");
         });

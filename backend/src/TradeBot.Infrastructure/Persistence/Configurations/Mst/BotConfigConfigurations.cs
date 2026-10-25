@@ -14,6 +14,7 @@ internal sealed class GeminiNewsConfigConfiguration : IEntityTypeConfiguration<G
             t.HasCheckConstraint("ck_gemini_news_config_weights_range",
                 "pattern_weight_pct BETWEEN 0 AND 100 AND news_weight_pct BETWEEN 0 AND 100 AND oi_greeks_weight_pct BETWEEN 0 AND 100");
             t.HasCheckConstraint("ck_gemini_news_config_polling", "intraday_poll_seconds >= 10 AND volume_spike_trigger_multiplier > 1 AND max_calls_per_minute >= 1");
+            t.HasCheckConstraint("ck_gemini_news_config_premarket_time", "premarket_scan_time < TIME '09:15'");
         });
 
         b.HasKey(x => x.GeminiConfigId);
@@ -36,7 +37,8 @@ internal sealed class StrategyConfigConfiguration : IEntityTypeConfiguration<Str
                 "entry_start_time >= TIME '09:15' AND entry_cutoff_time > entry_start_time AND square_off_time > entry_cutoff_time AND square_off_time <= TIME '15:29'");
             t.HasCheckConstraint("ck_strategy_config_auth", "auth_login_time < entry_start_time AND auth_max_retries BETWEEN 0 AND 10");
             t.HasCheckConstraint("ck_strategy_config_confidence", "min_combined_confidence BETWEEN 0 AND 100");
-            t.HasCheckConstraint("ck_strategy_config_timeframes", "trend_timeframe <> trigger_timeframe");
+            t.HasCheckConstraint("ck_strategy_config_timeframes",
+                "array_position(ARRAY['1m','3m','5m','15m','1h','1d'], trend_timeframe::text) > array_position(ARRAY['1m','3m','5m','15m','1h','1d'], trigger_timeframe::text)");
         });
 
         b.HasKey(x => x.StrategyConfigId);

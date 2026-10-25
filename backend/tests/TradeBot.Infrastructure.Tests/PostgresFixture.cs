@@ -41,7 +41,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         var account = new TradingAccount { AccountName = $"Paper {suffix}", ClientId = $"PAPER-{suffix}", UserName = "Test User" };
         account.RiskConfig = new AccountRiskConfig();
-        var instrument = new Instrument { Symbol = $"NIFTY-{suffix}", InstrumentType = InstrumentType.Index, LotSize = 65, TickSize = 0.05m, StrikeStep = 50, IsTradable = true };
+        var instrument = new Instrument { Symbol = $"NIFTY-{suffix}", InstrumentType = InstrumentType.Index, LotSize = 65, FreezeQuantity = 1800, TickSize = 0.05m, StrikeStep = 50, IsTradable = true };
         var pattern = new ChartPattern { PatternCode = $"BULL_ENGULF_{suffix}", PatternName = "Bullish Engulfing", Category = PatternCategory.Candlestick, Direction = PatternDirection.Bullish, MinCandlesRequired = 2, DefaultWeight = 60 };
         db.AddRange(account, instrument, pattern);
         await db.SaveChangesAsync();
