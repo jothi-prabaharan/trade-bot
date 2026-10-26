@@ -1,5 +1,6 @@
 using TradeBot.Application.Abstractions;
 using TradeBot.Application.Validation;
+using TradeBot.Domain.Entities.Mst;
 using TradeBot.Domain.Entities.Trn;
 using TradeBot.Domain.Enums;
 
@@ -20,7 +21,8 @@ public sealed record TradeRow(
     long TradeId, long AccountId, string AccountName, TradeMode Mode, DateTime EntryTimeUtc, DateTime? ExitTimeUtc,
     string Contract, OptionType? OptType, int Quantity, int Lots, decimal EntryPrice, decimal StopLoss, decimal TrailingSl, decimal Target,
     decimal? Ltp, decimal? ExitPrice, decimal ProgressPct, TradeStatus Status, string? PatternCode, string? PatternName,
-    string? NewsHeadline, MarketBias? NewsSentiment, decimal GrossPnl, decimal Charges, decimal NetPnl, decimal NetPnlPct);
+    string? NewsHeadline, MarketBias? NewsSentiment, decimal GrossPnl, decimal Charges, decimal NetPnl, decimal NetPnlPct,
+    long SecurityId, long? InstrumentId, Timeframe? PatternTimeframe);
 
 public sealed record BotStatus(
     DateTime ServerTimeUtc, string MarketSession, bool FeedConnected, DateTime? LastTickUtc, bool GlobalKillSwitch, string? GlobalReason,
@@ -37,13 +39,7 @@ public sealed class DashboardService(ConfigCache config, TokenStore tokens, Trad
     {
         var now = clock.GetUtcNow().UtcDateTime;
         var today = Ist.Today(clock);
-        var accounts = config.Accounts.Where(a => scope switch
-        {
-            "real" => a.TradeMode == TradeMode.Real,
-            "paper" => a.TradeMode == TradeMode.Paper,
-            "all" or "" => true,
-            _ => long.TryParse(scope, out var id) && a.AccountId == id,
-        }).ToList();
+        var accounts = InScope(scope);
         var ids = accounts.Select(a => a.AccountId).ToHashSet();
 
         var days = (await trading.DayPnlsAsync(today, ct)).Where(d => ids.Contains(d.AccountId)).ToDictionary(d => d.AccountId);
@@ -79,6 +75,14 @@ public sealed class DashboardService(ConfigCache config, TokenStore tokens, Trad
         return new DashboardOverview(botStatus, cards, consolidated, perAccount, rows);
     }
 
+    public List<TradingAccount> InScope(string scope) => config.Accounts.Where(a => scope switch
+    {
+        "real" => a.TradeMode == TradeMode.Real,
+        "paper" => a.TradeMode == TradeMode.Paper,
+        "all" or "" => true,
+        _ => long.TryParse(scope, out var id) && a.AccountId == id,
+    }).ToList();
+
     private string Session(DateTime nowUtc)
     {
         var ist = FixedLimits.ToIst(nowUtc);
@@ -103,7 +107,8 @@ public sealed class DashboardService(ConfigCache config, TokenStore tokens, Trad
         return new TradeRow(t.TradeId, t.AccountId, config.Account(t.AccountId)?.AccountName ?? $"#{t.AccountId}", t.TradeMode, t.EntryTime, t.ExitTime,
             t.Security?.PmlSymbol ?? t.SecurityId.ToString(), t.Security?.OptType, t.Quantity, t.Lots, t.EntryBuyPrice, t.StopLossPrice, trailing, t.TargetSellPrice,
             ltp, t.ExitSellPrice, Math.Round(progress, 1), t.TradeStatus, t.Detection?.Pattern?.PatternCode, t.Detection?.Pattern?.PatternName,
-            t.News?.Headline, t.News?.Sentiment, Math.Round(gross, 2), t.BrokerageAndCharges, Math.Round(net, 2), cost == 0 ? 0 : Math.Round(net / cost * 100, 2));
+            t.News?.Headline, t.News?.Sentiment, Math.Round(gross, 2), t.BrokerageAndCharges, Math.Round(net, 2), cost == 0 ? 0 : Math.Round(net / cost * 100, 2),
+            t.SecurityId, t.Security?.InstrumentId, t.Detection?.Timeframe);
     }
 
     private static PnlSummary Summary(DailyAccountPnl? d, decimal unrealized, decimal maxLoss)

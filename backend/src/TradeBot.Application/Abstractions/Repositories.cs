@@ -96,6 +96,8 @@ public interface ITradingRepository
     Task UpdateBotStateAsync(DailyBotState state, CancellationToken ct);
     Task AddEventAsync(SystemEvent e, CancellationToken ct);
     Task<List<SystemEvent>> EventsAsync(int limit, CancellationToken ct);
+    /// <summary>Events with id greater than <paramref name="afterId"/>, oldest first.</summary>
+    Task<List<SystemEvent>> EventsAfterAsync(long afterId, int limit, CancellationToken ct);
 }
 
 /// <summary>Daily Paytm scrip-master download into mst.security_master.</summary>

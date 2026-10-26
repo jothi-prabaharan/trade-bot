@@ -134,7 +134,7 @@ public sealed class FundsSync(ConfigCache config, IPaytmMoneyClient client, Toke
 public sealed class EngineOrchestrator(
     ConfigCache config, TokenStore tokens, IMarketFeed feed, UniverseService universe, CandlePipeline candles, TradeManager trades,
     HistoryBackfill backfill, WatchlistBuilder watchlist, FundsSync funds, IScripMasterSync scrips, IMarketRepository market,
-    IConfigRepository configs, ITradingRepository trading, IAlertSender alerts, TimeProvider clock, ILogger<EngineOrchestrator> log)
+    IConfigRepository configs, ITradingRepository trading, IAlertSender alerts, PnlCurveService pnlCurve, TimeProvider clock, ILogger<EngineOrchestrator> log)
 {
     private static readonly TimeOnly PreOpenAt = new(8, 40), EndOfDayAt = new(15, 35);
     private DateOnly? _preOpenDone, _prepDone, _eodDone;
@@ -188,6 +188,7 @@ public sealed class EngineOrchestrator(
         {
             candles.Flush(now);
             await trades.OnSecondAsync(ct);
+            await pnlCurve.SampleAsync(ct);
             if ((now - _lastUniverse).TotalSeconds >= 60) { _lastUniverse = now; await universe.RefreshAsync(ct); }
             if ((now - _lastFunds).TotalSeconds >= 30) { _lastFunds = now; await funds.SyncAsync(ct); }
             await WatchFeedAsync(now, time, session, ct);

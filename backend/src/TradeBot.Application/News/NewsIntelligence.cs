@@ -92,7 +92,7 @@ public static class SentimentAggregator
 /// <summary>Gemini scans → trn.company_daily_news → trn.daily_market_sentiment → NOTIFY tradebot_news_updated.</summary>
 public sealed class NewsIntelligenceService(
     INewsIntelligenceClient ai, IConfigRepository configs, IMarketRepository market, IIntelligenceRepository intel,
-    IEventBus bus, IAlertSender alerts, TimeProvider clock, ILogger<NewsIntelligenceService> log)
+    ITradingRepository trading, IEventBus bus, IAlertSender alerts, TimeProvider clock, ILogger<NewsIntelligenceService> log)
 {
     public const int CompaniesPerPrompt = 30;
 
@@ -157,7 +157,14 @@ public sealed class NewsIntelligenceService(
         var added = await intel.AddNewsAsync(rows, ct);
 
         foreach (var extreme in rows.Where(r => r.ImpactLevel == ImpactLevel.ExtremeHalt))
+        {
             await alerts.SendAsync(AlertKind.Critical, $"🚨 EXTREME news: {System.Net.WebUtility.HtmlEncode(extreme.Headline)}", ct);
+            await trading.AddEventAsync(new SystemEvent
+            {
+                EventType = "NEWS_EXTREME", Severity = EventSeverity.Critical,
+                Message = $"EXTREME news: {extreme.Headline}" is var m && m.Length > 1000 ? m[..1000] : m,
+            }, ct);
+        }
         return added;
     }
 

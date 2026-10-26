@@ -81,19 +81,37 @@ public class ApiSmokeTests(ApiFactory api)
         var ws = api.Server.CreateWebSocketClient();
         using var socket = await ws.ConnectAsync(new Uri(api.Server.BaseAddress, $"/ws/dashboard?access_token={token}"), CancellationToken.None);
 
-        var buffer = new byte[1 << 20];
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var msg = JsonNode.Parse(await ReceiveAsync(socket, timeout.Token))!;
+        Assert.Equal("overview", msg["type"]!.GetValue<string>());
+        Assert.NotNull(msg["data"]!["bot"]);
+
+        // New system events are pushed for toasts
+        await using (var db = await api.DbAsync())
+        {
+            db.Add(new TradeBot.Domain.Entities.Trn.SystemEvent { EventType = "SOCKET_TEST", Severity = TradeBot.Domain.Enums.EventSeverity.Critical, Message = "ping" });
+            await db.SaveChangesAsync();
+        }
+        JsonNode? events;
+        do events = JsonNode.Parse(await ReceiveAsync(socket, timeout.Token));
+        while (events!["type"]!.GetValue<string>() != "events");
+        var ev = events["data"]!.AsArray().Single()!;
+        Assert.Equal(("SOCKET_TEST", "CRITICAL"), (ev["eventType"]!.GetValue<string>(), ev["severity"]!.GetValue<string>()));
+
+        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
+    }
+
+    private static async Task<string> ReceiveAsync(WebSocket socket, CancellationToken ct)
+    {
+        var buffer = new byte[1 << 16];
         var sb = new StringBuilder();
         WebSocketReceiveResult r;
         do
         {
-            r = await socket.ReceiveAsync(buffer, timeout.Token);
+            r = await socket.ReceiveAsync(buffer, ct);
             sb.Append(Encoding.UTF8.GetString(buffer, 0, r.Count));
         } while (!r.EndOfMessage);
-
-        var msg = JsonNode.Parse(sb.ToString())!;
-        Assert.Equal("overview", msg["type"]!.GetValue<string>());
-        Assert.NotNull(msg["data"]!["bot"]);
-        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
+        return sb.ToString();
     }
 }

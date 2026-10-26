@@ -37,6 +37,8 @@ public static class DependencyInjection
         services.AddSingleton<FundsSync>();
         services.AddSingleton<EngineOrchestrator>();
         services.AddSingleton<DashboardService>();
+        services.AddSingleton<PnlCurveService>();
+        services.AddSingleton<CandleQueryService>();
         return services;
     }
 

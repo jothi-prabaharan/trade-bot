@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using TradeBot.Application.Abstractions;
 using TradeBot.Application.Engine;
 using TradeBot.Domain.Entities.Mst;
+using TradeBot.Domain.Entities.Trn;
 using TradeBot.Domain.Enums;
 
 namespace TradeBot.Application.Auth;
@@ -12,7 +13,7 @@ namespace TradeBot.Application.Auth;
 /// </summary>
 public sealed class BrokerAuthService(
     IAccountRepository accounts, IConfigRepository configs, IPaytmMoneyClient paytm, IBrokerLoginAutomation browser,
-    IEventBus bus, IAlertSender alerts, TimeProvider clock, ILogger<BrokerAuthService> log)
+    ITradingRepository trading, IEventBus bus, IAlertSender alerts, TimeProvider clock, ILogger<BrokerAuthService> log)
 {
     public static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(30);
 
@@ -50,6 +51,11 @@ public sealed class BrokerAuthService(
                     LoginStatus = LoginStatus.Success, LoginMethod = LoginMethod.Headless, AttemptCount = attempt,
                 }, ct);
                 await bus.PublishAsync(EventChannels.TokensUpdated, accountId.ToString(), ct);
+                await trading.AddEventAsync(new SystemEvent
+                {
+                    AccountId = accountId, EventType = "LOGIN_SUCCESS", Severity = EventSeverity.Info,
+                    Message = $"Paytm login succeeded for {account.AccountName} (attempt {attempt})",
+                }, ct);
                 log.LogInformation("Account {Account} logged in (attempt {Attempt})", accountId, attempt);
                 return true;
             }
@@ -68,6 +74,11 @@ public sealed class BrokerAuthService(
             ErrorMessage = lastError is { Length: > 1000 } ? lastError[..1000] : lastError,
         }, ct);
         await bus.PublishAsync(EventChannels.TokensUpdated, accountId.ToString(), ct);
+        await trading.AddEventAsync(new SystemEvent
+        {
+            AccountId = accountId, EventType = "LOGIN_FAILED", Severity = EventSeverity.Critical,
+            Message = $"Paytm login failed for {account.AccountName} after {tried} attempt(s): {lastError}" is var m && m.Length > 1000 ? m[..1000] : m,
+        }, ct);
         await alerts.SendAsync(AlertKind.Critical,
             $"🔐 Paytm login failed for <b>{System.Net.WebUtility.HtmlEncode(account.AccountName)}</b> after {tried} attempt(s): {System.Net.WebUtility.HtmlEncode(lastError ?? "")}\n" +
             $"Log in manually: {loginUrl}\nThen paste the requestToken on the dashboard.", ct);

@@ -176,6 +176,7 @@ public sealed class NewsHarness
     public Stub<IConfigRepository> Configs { get; } = Stub<IConfigRepository>.Create();
     public Stub<IMarketRepository> Market { get; } = Stub<IMarketRepository>.Create();
     public Stub<IIntelligenceRepository> Intel { get; } = Stub<IIntelligenceRepository>.Create();
+    public Stub<ITradingRepository> Trading { get; } = Stub<ITradingRepository>.Create();
     public Stub<IEventBus> Bus { get; } = Stub<IEventBus>.Create();
     public Stub<IAlertSender> Alerts { get; } = Stub<IAlertSender>.Create();
     public GeminiNewsConfig Gemini { get; } = new() { ModelName = "gemini-test", GeminiApiKey = "k", MaxCallsPerMinute = 30 };
@@ -200,7 +201,7 @@ public sealed class NewsHarness
             return rows.Count;
         });
         Intel.On(nameof(IIntelligenceRepository.NewsAsync), _ => Stored.ToList());
-        Service = new NewsIntelligenceService(Ai.Object, Configs.Object, Market.Object, Intel.Object, Bus.Object, Alerts.Object, clock, NullLogger<NewsIntelligenceService>.Instance);
+        Service = new NewsIntelligenceService(Ai.Object, Configs.Object, Market.Object, Intel.Object, Trading.Object, Bus.Object, Alerts.Object, clock, NullLogger<NewsIntelligenceService>.Instance);
         Scheduler = new NewsScheduler(Service, Configs.Object, Intel.Object, clock, NullLogger<NewsScheduler>.Instance);
     }
 
@@ -254,6 +255,8 @@ public class NewsIntelligenceServiceTests
         var alert = Assert.Single(h.Alerts.Calls(nameof(IAlertSender.SendAsync)));
         Assert.Equal(AlertKind.Critical, alert[0]);
         Assert.Contains("SEBI &lt;bans&gt; trading", (string)alert[1]!);
+        var ev = (SystemEvent)Assert.Single(h.Trading.Calls(nameof(ITradingRepository.AddEventAsync)))[0]!;
+        Assert.Equal(("NEWS_EXTREME", EventSeverity.Critical), (ev.EventType, ev.Severity));
     }
 
     [Fact]
@@ -405,6 +408,7 @@ public sealed class AuthHarness
     public Stub<IConfigRepository> Configs { get; } = Stub<IConfigRepository>.Create();
     public Stub<IPaytmMoneyClient> Paytm { get; } = Stub<IPaytmMoneyClient>.Create();
     public Stub<IBrokerLoginAutomation> Browser { get; } = Stub<IBrokerLoginAutomation>.Create();
+    public Stub<ITradingRepository> Trading { get; } = Stub<ITradingRepository>.Create();
     public Stub<IEventBus> Bus { get; } = Stub<IEventBus>.Create();
     public Stub<IAlertSender> Alerts { get; } = Stub<IAlertSender>.Create();
     public StrategyConfig Strategy { get; } = new() { AuthMaxRetries = 0 };
@@ -425,9 +429,11 @@ public sealed class AuthHarness
         Paytm.On(nameof(IPaytmMoneyClient.LoginUrl), a => $"https://login.example/?apiKey={a[0]}&state={a[1]}");
         Paytm.On(nameof(IPaytmMoneyClient.GenerateTokensAsync), _ => new BrokerTokens("access", "public", "read", null));
         Browser.On(nameof(IBrokerLoginAutomation.GetRequestTokenAsync), _ => "req-token");
-        Service = new BrokerAuthService(Accounts.Object, Configs.Object, Paytm.Object, Browser.Object, Bus.Object, Alerts.Object, clock, NullLogger<BrokerAuthService>.Instance);
+        Service = new BrokerAuthService(Accounts.Object, Configs.Object, Paytm.Object, Browser.Object, Trading.Object, Bus.Object, Alerts.Object, clock, NullLogger<BrokerAuthService>.Instance);
         Scheduler = new AuthScheduler(Service, Configs.Object, Accounts.Object, clock, NullLogger<AuthScheduler>.Instance);
     }
+
+    public List<string> EventTypes => Trading.Calls(nameof(ITradingRepository.AddEventAsync)).Select(c => ((SystemEvent)c[0]!).EventType).ToList();
 
     public List<long> LoggedIn => Browser.Calls(nameof(IBrokerLoginAutomation.GetRequestTokenAsync)).Select(c => ((TradingAccount)c[0]!).AccountId).ToList();
 }
@@ -458,6 +464,7 @@ public class BrokerAuthServiceTests
         Assert.Equal("req-token", h.Paytm.Calls(nameof(IPaytmMoneyClient.GenerateTokensAsync)).Single()[2]);
         Assert.Contains(h.Bus.Calls(nameof(IEventBus.PublishAsync)), c => (string)c[0]! == EventChannels.TokensUpdated && (string)c[1]! == "7");
         Assert.Empty(h.Alerts.Calls(nameof(IAlertSender.SendAsync)));
+        Assert.Equal(new[] { "LOGIN_SUCCESS" }, h.EventTypes);
     }
 
     [Fact]
@@ -483,6 +490,7 @@ public class BrokerAuthServiceTests
         Assert.Equal(AlertKind.Critical, alert[0]);
         Assert.Contains("https://login.example/?apiKey=key&state=tb7", (string)alert[1]!);
         Assert.Contains(h.Bus.Calls(nameof(IEventBus.PublishAsync)), c => (string)c[0]! == EventChannels.TokensUpdated);
+        Assert.Equal(new[] { "LOGIN_FAILED" }, h.EventTypes);
     }
 
     [Fact]

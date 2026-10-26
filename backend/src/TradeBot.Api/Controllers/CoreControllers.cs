@@ -85,6 +85,8 @@ public sealed class TradeController(ITradingRepository trading, IIntelligenceRep
     [HttpGet("signals")]
     public Task<List<Domain.Entities.Trn.Signal>> Signals([FromQuery] DateOnly? date, CancellationToken ct) => intel.SignalsAsync(date ?? Ist.Today(clock), ct);
 
+    /// <summary>Latest events (newest first), or with afterId the ones after it (oldest first).</summary>
     [HttpGet("events")]
-    public Task<List<Domain.Entities.Trn.SystemEvent>> Events([FromQuery] int limit = 100, CancellationToken ct = default) => trading.EventsAsync(Math.Clamp(limit, 1, 1000), ct);
+    public Task<List<Domain.Entities.Trn.SystemEvent>> Events([FromQuery] int limit = 100, [FromQuery] long? afterId = null, CancellationToken ct = default) =>
+        afterId is { } id ? trading.EventsAfterAsync(id, Math.Clamp(limit, 1, 1000), ct) : trading.EventsAsync(Math.Clamp(limit, 1, 1000), ct);
 }

@@ -65,10 +65,13 @@ public sealed class EngineHostedService(
     }
 }
 
-/// <summary>/ws/dashboard: pushes the overview once a second when it changes. Clients may send {"scope":"real"}.</summary>
+/// <summary>
+/// /ws/dashboard: pushes {"type":"overview"} once a second when it changes and {"type":"events"} for each batch of new
+/// trn.system_events (toasts). Clients may send {"scope":"real"}.
+/// </summary>
 public static class DashboardSocket
 {
-    public static async Task HandleAsync(HttpContext ctx, DashboardService dashboard, ILogger<DashboardService> log)
+    public static async Task HandleAsync(HttpContext ctx, DashboardService dashboard, ITradingRepository trading, ILogger<DashboardService> log)
     {
         if (!ctx.WebSockets.IsWebSocketRequest)
         {
@@ -97,6 +100,7 @@ public static class DashboardSocket
         string? last = null;
         try
         {
+            var lastEventId = (await trading.EventsAsync(1, cts.Token)).FirstOrDefault()?.EventId ?? 0;
             while (ws.State == WebSocketState.Open && !cts.IsCancellationRequested)
             {
                 var json = JsonSerializer.Serialize(new { type = "overview", data = await dashboard.BuildAsync(scope, cts.Token) }, ApiJson.Options);
@@ -104,6 +108,12 @@ public static class DashboardSocket
                 {
                     await ws.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, cts.Token);
                     last = json;
+                }
+                if (await trading.EventsAfterAsync(lastEventId, 100, cts.Token) is { Count: > 0 } events)
+                {
+                    lastEventId = events[^1].EventId;
+                    var payload = JsonSerializer.Serialize(new { type = "events", data = events }, ApiJson.Options);
+                    await ws.SendAsync(Encoding.UTF8.GetBytes(payload), WebSocketMessageType.Text, true, cts.Token);
                 }
                 await Task.Delay(1000, cts.Token);
             }

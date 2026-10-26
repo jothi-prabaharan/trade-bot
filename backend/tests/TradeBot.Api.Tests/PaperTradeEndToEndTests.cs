@@ -118,6 +118,25 @@ public class PaperTradeEndToEndTests(ApiFactory api)
         Assert.Contains(api.Alerts.Sent, a => a.Kind == AlertKind.Entry);
         Assert.Contains(api.Alerts.Sent, a => a.Kind == AlertKind.Exit);
 
+        // ---- Chart data for the dashboard ----
+        var curve = (await client.GetFromJsonAsync<JsonObject>($"/api/dashboard/pnl-curve?scope={accountId}"))!;
+        var realized = curve["realized"]!.AsArray();
+        Assert.Equal(3, realized.Count);
+        Assert.Equal(closed1.NetPnl + closed2.NetPnl + closed3.NetPnl, realized[^1]!["value"]!.GetValue<decimal>());
+
+        var bars = (await client.GetFromJsonAsync<JsonArray>($"/api/candles?instrumentId={instrument.InstrumentId}&securityId={option.SecurityId}&timeframe=1m&date={ApiFactory.TradingDay:yyyy-MM-dd}"))!;
+        Assert.True(bars.Count >= 2, $"expected option candles, got {bars.Count}");
+        Assert.Equal(131m, bars.Max(b => b!["high"]!.GetValue<decimal>()));
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync($"/api/candles?instrumentId={instrument.InstrumentId}&timeframe=7m")).StatusCode);
+
+        var instruments = (await client.GetFromJsonAsync<JsonArray>("/api/instruments"))!;
+        Assert.Contains(instruments, i => i!["symbol"]!.GetValue<string>() == "NIFTY");
+
+        var events = (await client.GetFromJsonAsync<JsonArray>("/api/events?afterId=0&limit=1000"))!.Select(e => e!["eventType"]!.GetValue<string>()).ToList();
+        Assert.Contains("TRADE_OPENED", events);
+        Assert.Contains("TRADE_CLOSED", events);
+        Assert.Contains("SIGNAL_REJECTED", events);
+
         // ---- Global kill switch blocks new entries ----
         Assert.Equal(HttpStatusCode.Accepted, (await client.PostAsJsonAsync("/api/bot/kill-switch", new { reason = "e2e" })).StatusCode);
         Assert.True((await client.GetFromJsonAsync<JsonObject>("/api/bot/status"))!["globalKillSwitch"]!.GetValue<bool>());
@@ -132,6 +151,7 @@ public class PaperTradeEndToEndTests(ApiFactory api)
         var t = new Tick(OptionSecurityId, ltp, api.Clock.GetUtcNow().UtcDateTime);
         Hub.OnTick(t);
         Paper.OnTick(t.SecurityId, t.Ltp, t.TimeUtc);
+        api.Get<CandlePipeline>().OnTick(t);
         Trades.OnTick(t);
     }
 

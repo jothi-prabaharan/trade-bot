@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using TradeBot.Api.Hosting;
 using TradeBot.Application;
+using TradeBot.Application.Abstractions;
 using TradeBot.Application.Engine;
 using TradeBot.Infrastructure;
 using TradeBot.Infrastructure.Persistence;
@@ -74,7 +75,8 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapGet("/health", (Microsoft.Extensions.Hosting.IHostEnvironment env) => Results.Ok(new { status = "ok", env = env.EnvironmentName, utc = DateTime.UtcNow })).AllowAnonymous();
-app.Map("/ws/dashboard", (HttpContext ctx, DashboardService d, ILogger<DashboardService> log) => DashboardSocket.HandleAsync(ctx, d, log)).RequireAuthorization();
+app.Map("/ws/dashboard", (HttpContext ctx, DashboardService d, ITradingRepository trading, ILogger<DashboardService> log) =>
+    DashboardSocket.HandleAsync(ctx, d, trading, log)).RequireAuthorization();
 app.MapControllers();
 
 app.Run();

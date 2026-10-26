@@ -75,3 +75,15 @@
 | UI parity | `GET /api/validation/rules` + shared JSON test vectors |
 | PAPER validation | Identical to REAL except broker-only rules (credentials, token) |
 | Freeze quantity | `mst.instruments.freeze_quantity`, cap/reject (no slicing) |
+
+## Phase 4 — Dashboard
+| Item | Decision |
+|---|---|
+| Framework | Angular 22 standalone, zoneless; signals for view state, RxJS for HTTP/WebSocket streams |
+| Layout | One unified screen; every config editor opens in a Bootstrap offcanvas drawer |
+| Theme | Dark by default with a light toggle (Bootstrap 5.3 color modes), remembered per browser |
+| Hosting | nginx serves the build and proxies `/api` + `/ws` to the API (same origin, no CORS) |
+| Charts | TradingView lightweight-charts: trade drawer (option + underlying candles, entry/SL/trailing/target lines, pattern pivots) and intraday PnL curve |
+| Confirmations | Manual exit: confirm dialog. Kill switch: type `KILL` + reason. PAPER→REAL: type the client ID. REAL→PAPER: confirm dialog |
+| Alerts | Toasts for trade, rejection and login events; sound on critical events; mute toggle |
+| Tests | Vitest (unit + all shared validation vectors) and Playwright e2e against the real API with a PAPER account |

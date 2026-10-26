@@ -166,7 +166,13 @@ public sealed class TradingRepository(IDbContextFactory<TradeBotDbContext> facto
     public async Task<List<SystemEvent>> EventsAsync(int limit, CancellationToken ct)
     {
         await using var db = await Db(ct);
-        return await db.SystemEvents.AsNoTracking().OrderByDescending(e => e.CreatedAt).Take(limit).ToListAsync(ct);
+        return await db.SystemEvents.AsNoTracking().OrderByDescending(e => e.EventId).Take(limit).ToListAsync(ct);
+    }
+
+    public async Task<List<SystemEvent>> EventsAfterAsync(long afterId, int limit, CancellationToken ct)
+    {
+        await using var db = await Db(ct);
+        return await db.SystemEvents.AsNoTracking().Where(e => e.EventId > afterId).OrderBy(e => e.EventId).Take(limit).ToListAsync(ct);
     }
 
     private static IQueryable<DailyTrade> WithDetails(TradeBotDbContext db) =>
