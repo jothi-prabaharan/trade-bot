@@ -121,7 +121,8 @@ public class PaperTradeEndToEndTests(ApiFactory api)
         // ---- Chart data for the dashboard ----
         var curve = (await client.GetFromJsonAsync<JsonObject>($"/api/dashboard/pnl-curve?scope={accountId}"))!;
         var realized = curve["realized"]!.AsArray();
-        Assert.Equal(3, realized.Count);
+        Assert.Equal(4, realized.Count); // starts at 0, then one step per closed trade
+        Assert.Equal(0m, realized[0]!["value"]!.GetValue<decimal>());
         Assert.Equal(closed1.NetPnl + closed2.NetPnl + closed3.NetPnl, realized[^1]!["value"]!.GetValue<decimal>());
 
         var bars = (await client.GetFromJsonAsync<JsonArray>($"/api/candles?instrumentId={instrument.InstrumentId}&securityId={option.SecurityId}&timeframe=1m&date={ApiFactory.TradingDay:yyyy-MM-dd}"))!;

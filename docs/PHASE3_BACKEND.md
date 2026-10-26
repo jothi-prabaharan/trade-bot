@@ -86,6 +86,7 @@ PAPER and REAL share this engine. Only the gateway differs:
 | Config | `GET/PUT strategy-config`, `GET patterns`, `PUT patterns/{id}`, `PUT patterns/category/{category}`, `GET patterns/detections`, `GET/POST/PUT/DELETE market-holidays` |
 | News | `GET news`, `GET news/sentiment`, `GET/PUT news/config`, `POST news/scan` |
 | Validation | `GET validation/rules` (rule catalog + form rules for Angular) |
+| Charts (Phase 4) | `GET candles`, `GET dashboard/pnl-curve`, `GET instruments`, `GET events?afterId=` |
 
 Secrets (`[Encrypted]`) are write-only. They are stored as `v1:` AES-GCM ciphertext and never serialized; responses expose `hasApiKey`-style flags instead.
 
@@ -129,7 +130,7 @@ Run the first REAL day with one lot (`max_lots_per_trade = 1`).
 ## 12. Tests
 | Suite | Tests | Covers |
 |---|---|---|
-| `TradeBot.Application.Tests` | 292 | Validation + shared vectors, market maths, 130 pattern detectors, brackets, OCO/trailing/paper exchange, news aggregation, schedulers, broker login |
+| `TradeBot.Application.Tests` | 293 | Validation + shared vectors, market maths, 130 pattern detectors, brackets, OCO/trailing/paper exchange, news aggregation, schedulers, broker login |
 | `TradeBot.Infrastructure.Tests` | 93 | Migrations on PostgreSQL, every CHECK constraint, form ↔ DB bound parity, encryption, Paytm/Gemini adapters |
 | `TradeBot.Api.Tests` | 12 | Real API host on PostgreSQL: auth, validation errors, dashboard socket, and a full PAPER flow (entry → trailing SL → target; stop-loss; re-entry cooldown; dashboard; manual exit; kill switch) |
 

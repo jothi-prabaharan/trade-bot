@@ -28,7 +28,8 @@ builder.Services.AddSingleton(auth);
 builder.Services.AddSingleton<JwtIssuer>();
 builder.Services.AddTradeBotInfrastructure(config);
 builder.Services.AddTradeBotEngine();
-if (config.GetValue("Engine:Enabled", true)) builder.Services.AddHostedService<EngineHostedService>();
+var engineEnabled = config.GetValue("Engine:Enabled", true);
+if (engineEnabled) builder.Services.AddHostedService<EngineHostedService>();
 
 builder.Services.AddControllers().AddJsonOptions(o => ApiJson.Configure(o.JsonSerializerOptions));
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
@@ -65,6 +66,13 @@ if (config.GetValue("Database:MigrateOnStartup", true))
 {
     await using var db = await app.Services.GetRequiredService<IDbContextFactory<TradeBotDbContext>>().CreateDbContextAsync();
     await db.Database.MigrateAsync();
+}
+
+// The engine host loads these itself; an API-only host (engine off) still serves the dashboard from them
+if (!engineEnabled)
+{
+    await app.Services.GetRequiredService<ConfigCache>().ReloadAsync(CancellationToken.None);
+    await app.Services.GetRequiredService<TokenStore>().ReloadAsync(CancellationToken.None);
 }
 
 app.UseTradeBotErrors();

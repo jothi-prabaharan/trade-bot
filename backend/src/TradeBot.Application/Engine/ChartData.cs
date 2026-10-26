@@ -11,7 +11,7 @@ public sealed record CurvePoint(DateTime TimeUtc, decimal Value);
 public sealed record PnlCurve(IReadOnlyList<CurvePoint> Realized, IReadOnlyList<CurvePoint> Net);
 
 /// <summary>Intraday PnL curve: in-memory 15 s samples per account, plus realized steps rebuilt from today's trades.</summary>
-public sealed class PnlCurveService(ConfigCache config, TradeManager trades, ITradingRepository trading, TimeProvider clock)
+public sealed class PnlCurveService(ConfigCache config, TradeManager liveTrades, ITradingRepository trading, TimeProvider clock)
 {
     public static readonly TimeSpan SampleEvery = TimeSpan.FromSeconds(15);
 
@@ -36,7 +36,7 @@ public sealed class PnlCurveService(ConfigCache config, TradeManager trades, ITr
         foreach (var a in config.Accounts)
         {
             var d = days.GetValueOrDefault(a.AccountId);
-            var net = (d?.RealizedGrossPnl ?? 0) + trades.Unrealized(a.AccountId) - (d?.TotalCharges ?? 0);
+            var net = (d?.RealizedGrossPnl ?? 0) + liveTrades.Unrealized(a.AccountId) - (d?.TotalCharges ?? 0);
             var list = _samples.GetOrAdd(a.AccountId, _ => []);
             lock (list) list.Add((now, Math.Round(net, 2)));
         }
@@ -44,10 +44,10 @@ public sealed class PnlCurveService(ConfigCache config, TradeManager trades, ITr
 
     public async Task<PnlCurve> BuildAsync(IReadOnlySet<long> accountIds, CancellationToken ct)
     {
-        var closed = (await trading.TradesAsync(Ist.Today(clock), null, ct))
-            .Where(t => accountIds.Contains(t.AccountId) && t.ExitTime is not null && t.TradeStatus != TradeStatus.Open)
-            .OrderBy(t => t.ExitTime);
+        var trades = (await trading.TradesAsync(Ist.Today(clock), null, ct)).Where(t => accountIds.Contains(t.AccountId)).ToList();
+        var closed = trades.Where(t => t.ExitTime is not null && t.TradeStatus != TradeStatus.Open).OrderBy(t => t.ExitTime).ToList();
         var realized = new List<CurvePoint>();
+        if (closed.Count > 0) realized.Add(new CurvePoint(trades.Min(t => t.EntryTime), 0));
         decimal cumulative = 0;
         foreach (var t in closed)
         {

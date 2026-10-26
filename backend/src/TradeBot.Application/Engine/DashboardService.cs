@@ -66,8 +66,10 @@ public sealed class DashboardService(ConfigCache config, TokenStore tokens, Trad
                 r?.AllocatedCapital ?? 0, r?.FundsSyncedAt);
         }).ToList();
 
+        // MTM from the same rows the grid shows (live LTP for engine-managed trades, else last persisted LTP), net of entry charges
+        var mtm = rows.Where(r => r.Status == TradeStatus.Open).GroupBy(r => r.AccountId).ToDictionary(g => g.Key, g => g.Sum(r => r.NetPnl));
         var perAccount = accounts.Select(a => new AccountPnl(a.AccountId, a.AccountName, a.TradeMode,
-            Summary(days.GetValueOrDefault(a.AccountId), trades.Unrealized(a.AccountId), a.RiskConfig?.MaxDailyLoss ?? 0))).ToList();
+            Summary(days.GetValueOrDefault(a.AccountId), mtm.GetValueOrDefault(a.AccountId), a.RiskConfig?.MaxDailyLoss ?? 0))).ToList();
         var consolidated = Combine(perAccount.Select(p => p.Pnl).ToList());
 
         var bot = await trading.GetOrCreateBotStateAsync(today, ct);

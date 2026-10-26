@@ -105,15 +105,14 @@ public sealed class TradingRepository(IDbContextFactory<TradeBotDbContext> facto
         await using var db = await Db(ct);
         var existing = await db.DailyAccountPnls.AsNoTracking().SingleOrDefaultAsync(p => p.AccountId == accountId && p.TradingDate == date, ct);
         if (existing is not null) return existing;
-        var row = new DailyAccountPnl { AccountId = accountId, TradingDate = date, TradeMode = mode, OpeningBalance = openingBalance, AvailableMargin = availableMargin };
-        db.Add(row);
-        try { await db.SaveChangesAsync(ct); }
-        catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
-        {
-            await using var retry = await Db(ct);
-            return await retry.DailyAccountPnls.AsNoTracking().SingleAsync(p => p.AccountId == accountId && p.TradingDate == date, ct);
-        }
-        return row;
+        // Concurrent first requests of the day race here; ON CONFLICT keeps that quiet
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO trn.daily_account_pnl (trading_date, account_id, trade_mode, opening_balance, available_margin, utilised_margin, total_trades,
+              winning_trades, losing_trades, realized_gross_pnl, unrealized_mtm_pnl, total_charges, daily_loss_limit_used_pct, kill_switch_triggered, profit_lock_triggered)
+            VALUES ({date}, {accountId}, {DbValue.ToDb(mode)}, {openingBalance}, {availableMargin}, 0, 0, 0, 0, 0, 0, 0, 0, false, false)
+            ON CONFLICT DO NOTHING
+            """, ct);
+        return await db.DailyAccountPnls.AsNoTracking().SingleAsync(p => p.AccountId == accountId && p.TradingDate == date, ct);
     }
 
     public async Task<DailyAccountPnl?> DayPnlAsync(long accountId, DateOnly date, CancellationToken ct)
@@ -139,15 +138,9 @@ public sealed class TradingRepository(IDbContextFactory<TradeBotDbContext> facto
         await using var db = await Db(ct);
         var existing = await db.DailyBotStates.AsNoTracking().SingleOrDefaultAsync(s => s.TradingDate == date, ct);
         if (existing is not null) return existing;
-        var row = new DailyBotState { TradingDate = date };
-        db.Add(row);
-        try { await db.SaveChangesAsync(ct); }
-        catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
-        {
-            await using var retry = await Db(ct);
-            return await retry.DailyBotStates.AsNoTracking().SingleAsync(s => s.TradingDate == date, ct);
-        }
-        return row;
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO trn.daily_bot_state (trading_date, global_kill_switch_triggered) VALUES ({date}, false) ON CONFLICT DO NOTHING", ct);
+        return await db.DailyBotStates.AsNoTracking().SingleAsync(s => s.TradingDate == date, ct);
     }
 
     public async Task UpdateBotStateAsync(DailyBotState state, CancellationToken ct)

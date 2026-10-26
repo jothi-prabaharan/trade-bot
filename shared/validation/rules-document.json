@@ -1,0 +1,1294 @@
+{
+  "version": "2",
+  "rules": [
+    {
+      "code": "FX_MARKET_CLOSED",
+      "kind": "fixed",
+      "scope": "entry",
+      "message": "Outside market hours (09:15:00\u201315:29:59 IST).",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_NOT_TRADING_DAY",
+      "kind": "fixed",
+      "scope": "entry",
+      "message": "Not a trading day (weekend or NSE holiday).",
+      "source": "FixedLimits \u002B mst.market_holidays"
+    },
+    {
+      "code": "FX_STALE_TICK",
+      "kind": "fixed",
+      "scope": "entry",
+      "message": "Option LTP is older than 3 seconds.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_INVALID_SEGMENT",
+      "kind": "fixed",
+      "scope": "order",
+      "message": "Segment must be D (derivatives).",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_NOT_AN_OPTION",
+      "kind": "fixed",
+      "scope": "entry",
+      "message": "Contract must be an option (CE/PE).",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_INVALID_TRADE_MODE",
+      "kind": "fixed",
+      "scope": "account",
+      "message": "Trade mode must be PAPER or REAL.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_CONTRACT_EXPIRED",
+      "kind": "fixed",
+      "scope": "entry",
+      "message": "Option contract has expired.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_CONTRACT_MISMATCH",
+      "kind": "fixed",
+      "scope": "entry",
+      "message": "Option contract does not belong to the signal\u0027s instrument.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_ENTRY_MUST_BE_BUY",
+      "kind": "fixed",
+      "scope": "signal",
+      "message": "Only option buying is allowed (entry must be BUY).",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_SL_REQUIRED",
+      "kind": "fixed",
+      "scope": "signal",
+      "message": "Stop-loss price is mandatory.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_TARGET_REQUIRED",
+      "kind": "fixed",
+      "scope": "signal",
+      "message": "Target sell price is mandatory.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_SL_NOT_POSITIVE",
+      "kind": "fixed",
+      "scope": "signal",
+      "message": "Stop-loss price must be greater than 0.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_SL_NOT_BELOW_ENTRY",
+      "kind": "fixed",
+      "scope": "signal",
+      "message": "Stop-loss must be below the entry price.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_TARGET_NOT_ABOVE_ENTRY",
+      "kind": "fixed",
+      "scope": "signal",
+      "message": "Target must be above the entry price.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_PRICE_NOT_ON_TICK",
+      "kind": "fixed",
+      "scope": "order",
+      "message": "Price is not a multiple of the tick size.",
+      "source": "mst.security_master.tick_size"
+    },
+    {
+      "code": "FX_LEG_ORDER_TYPE_MISMATCH",
+      "kind": "fixed",
+      "scope": "order",
+      "message": "STOP_LOSS legs must be SL orders and TARGET_SELL legs LMT orders.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_SL_TRIGGER_INVALID",
+      "kind": "fixed",
+      "scope": "order",
+      "message": "SL orders need trigger \u003E 0 and sell limit price \u003C= trigger.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_PARENT_LINK_INVALID",
+      "kind": "fixed",
+      "scope": "order",
+      "message": "Exit legs must reference their entry order; entries must not.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_TRAILING_SL_LOOSENED",
+      "kind": "fixed",
+      "scope": "order",
+      "message": "Trailing stop-loss can only move up.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_TRAILING_SL_AT_TARGET",
+      "kind": "fixed",
+      "scope": "order",
+      "message": "Trailing stop-loss must stay below the target.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_MODE_UNCHANGED",
+      "kind": "fixed",
+      "scope": "modeToggle",
+      "message": "Account is already in the requested mode.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "FX_REAL_CONFIRMATION_REQUIRED",
+      "kind": "fixed",
+      "scope": "modeToggle",
+      "message": "Type the account\u0027s client ID to confirm switching to REAL.",
+      "source": "FixedLimits"
+    },
+    {
+      "code": "MS_ACCOUNT_INACTIVE",
+      "kind": "master",
+      "scope": "account",
+      "message": "Account is inactive.",
+      "source": "mst.trading_accounts.is_active"
+    },
+    {
+      "code": "MS_GLOBAL_KILL_SWITCH",
+      "kind": "master",
+      "scope": "account",
+      "message": "Global kill switch is active for today.",
+      "source": "trn.daily_bot_state"
+    },
+    {
+      "code": "MS_ACCOUNT_KILL_SWITCH",
+      "kind": "master",
+      "scope": "account",
+      "message": "Account kill switch is active for today.",
+      "source": "trn.daily_account_pnl.kill_switch_triggered"
+    },
+    {
+      "code": "MS_PROFIT_LOCKED",
+      "kind": "master",
+      "scope": "account",
+      "message": "Daily profit target reached; no new entries.",
+      "source": "trn.daily_account_pnl.profit_lock_triggered"
+    },
+    {
+      "code": "MS_DAILY_LOSS_LIMIT_REACHED",
+      "kind": "master",
+      "scope": "account",
+      "message": "Daily loss limit reached.",
+      "source": "mst.account_risk_config.max_daily_loss"
+    },
+    {
+      "code": "MS_API_CREDENTIALS_MISSING",
+      "kind": "master",
+      "scope": "account",
+      "message": "REAL mode needs API key and secret.",
+      "source": "mst.trading_accounts"
+    },
+    {
+      "code": "MS_TOKEN_INVALID",
+      "kind": "master",
+      "scope": "account",
+      "message": "No valid Paytm Money token (expires within 15 min or login failed).",
+      "source": "mst.account_auth_tokens"
+    },
+    {
+      "code": "MS_MAX_OPEN_TRADES",
+      "kind": "master",
+      "scope": "account",
+      "message": "Maximum concurrent open trades reached.",
+      "source": "mst.account_risk_config.max_open_trades"
+    },
+    {
+      "code": "MS_DUPLICATE_SIGNAL",
+      "kind": "master",
+      "scope": "account",
+      "message": "An order already exists for this signal on this account.",
+      "source": "trn.orders"
+    },
+    {
+      "code": "MS_MAX_TRADES_PER_DAY",
+      "kind": "master",
+      "scope": "account",
+      "message": "Daily trade count limit reached.",
+      "source": "mst.account_risk_config.max_trades_per_day"
+    },
+    {
+      "code": "MS_REENTRY_COOLDOWN",
+      "kind": "master",
+      "scope": "account",
+      "message": "Re-entry cooldown after a stop-loss exit on this instrument.",
+      "source": "mst.account_risk_config.reentry_cooldown_minutes"
+    },
+    {
+      "code": "MS_TOGGLE_BLOCKED_OPEN_TRADES",
+      "kind": "master",
+      "scope": "modeToggle",
+      "message": "Mode can only change while the account has no open trades.",
+      "source": "trn.daily_trades"
+    },
+    {
+      "code": "MS_INSTRUMENT_NOT_TRADABLE",
+      "kind": "master",
+      "scope": "entry",
+      "message": "Instrument is not enabled for trading.",
+      "source": "mst.instruments.is_tradable"
+    },
+    {
+      "code": "MS_SECURITY_INACTIVE",
+      "kind": "master",
+      "scope": "entry",
+      "message": "Option contract is inactive.",
+      "source": "mst.security_master.is_active"
+    },
+    {
+      "code": "MS_SECURITY_MASTER_STALE",
+      "kind": "master",
+      "scope": "entry",
+      "message": "Scrip master was not synced today.",
+      "source": "mst.security_master.synced_on"
+    },
+    {
+      "code": "MS_EXPIRY_DAY_SKIPPED",
+      "kind": "master",
+      "scope": "entry",
+      "message": "Expiry-day contracts are skipped by the expiry policy.",
+      "source": "mst.strategy_config.expiry_policy"
+    },
+    {
+      "code": "MS_OUTSIDE_ENTRY_WINDOW",
+      "kind": "master",
+      "scope": "entry",
+      "message": "Outside the strategy entry window.",
+      "source": "mst.strategy_config.entry_start_time / entry_cutoff_time"
+    },
+    {
+      "code": "MS_COMBINED_CONFIDENCE_LOW",
+      "kind": "master",
+      "scope": "signal",
+      "message": "Combined AI confidence below the strategy minimum.",
+      "source": "mst.strategy_config.min_combined_confidence"
+    },
+    {
+      "code": "MS_PATTERN_INACTIVE",
+      "kind": "master",
+      "scope": "signal",
+      "message": "Chart pattern is disabled.",
+      "source": "mst.chart_patterns.is_active"
+    },
+    {
+      "code": "MS_PATTERN_NOT_CONFIRMED",
+      "kind": "master",
+      "scope": "signal",
+      "message": "Pattern breakout is not confirmed.",
+      "source": "trn.detected_patterns.is_confirmed"
+    },
+    {
+      "code": "MS_PATTERN_CONFIDENCE_LOW",
+      "kind": "master",
+      "scope": "signal",
+      "message": "Pattern confidence below the account minimum.",
+      "source": "mst.account_risk_config.min_pattern_confidence"
+    },
+    {
+      "code": "MS_TRADING_HALT",
+      "kind": "master",
+      "scope": "entry",
+      "message": "Trading halted on this instrument (EXTREME news).",
+      "source": "trn.daily_market_sentiment / trn.company_daily_news"
+    },
+    {
+      "code": "MS_OPPOSING_NEWS_VETO",
+      "kind": "master",
+      "scope": "entry",
+      "message": "Opposing HIGH/EXTREME news today vetoes this direction.",
+      "source": "mst.account_risk_config.block_trade_on_opposing_news \u002B mst.gemini_news_config.veto_min_impact_level"
+    },
+    {
+      "code": "MS_PREMIUM_OUT_OF_BAND",
+      "kind": "master",
+      "scope": "sizing",
+      "message": "Option premium outside the allowed band.",
+      "source": "mst.account_risk_config.min/max_single_trade_price"
+    },
+    {
+      "code": "MS_RR_BELOW_MIN",
+      "kind": "master",
+      "scope": "sizing",
+      "message": "Risk-to-reward below the account minimum.",
+      "source": "mst.account_risk_config.min_risk_reward_ratio"
+    },
+    {
+      "code": "MS_SL_EXCEEDS_MAX_PCT",
+      "kind": "master",
+      "scope": "sizing",
+      "message": "Stop-loss distance exceeds max SL %.",
+      "source": "mst.account_risk_config.max_sl_pct"
+    },
+    {
+      "code": "MS_RISK_BUDGET_TOO_SMALL",
+      "kind": "master",
+      "scope": "sizing",
+      "message": "Risk per trade cannot cover even 1 lot.",
+      "source": "mst.account_risk_config.risk_per_trade_pct"
+    },
+    {
+      "code": "MS_DAILY_LOSS_HEADROOM_EXHAUSTED",
+      "kind": "master",
+      "scope": "sizing",
+      "message": "Remaining daily-loss headroom cannot cover 1 lot.",
+      "source": "mst.account_risk_config.max_daily_loss"
+    },
+    {
+      "code": "MS_INSUFFICIENT_MARGIN",
+      "kind": "master",
+      "scope": "sizing",
+      "message": "Available margin cannot cover 1 lot plus charges.",
+      "source": "mst.account_risk_config.available_margin"
+    },
+    {
+      "code": "MS_FREEZE_QTY_EXCEEDED",
+      "kind": "master",
+      "scope": "sizing",
+      "message": "1 lot exceeds the exchange freeze quantity.",
+      "source": "mst.instruments.freeze_quantity"
+    },
+    {
+      "code": "MS_QTY_NOT_LOT_MULTIPLE",
+      "kind": "master",
+      "scope": "order",
+      "message": "Quantity must be a multiple of the lot size.",
+      "source": "mst.security_master.lot_size"
+    },
+    {
+      "code": "MS_QTY_ABOVE_FREEZE",
+      "kind": "master",
+      "scope": "order",
+      "message": "Quantity exceeds the exchange freeze quantity.",
+      "source": "mst.instruments.freeze_quantity"
+    }
+  ],
+  "forms": [
+    {
+      "form": "riskConfig",
+      "fields": [
+        {
+          "field": "allocatedCapital",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": true,
+          "max": 9999999999999999.99,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "openingBalance",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 9999999999999999.99,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "availableMargin",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 9999999999999999.99,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "utilisedMargin",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 9999999999999999.99,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "riskPerTradePct",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": true,
+          "max": 10,
+          "maxExclusive": false,
+          "scale": 4
+        },
+        {
+          "field": "minSingleTradePrice",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": true,
+          "max": 9999999999999999.99,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "maxSingleTradePrice",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": true,
+          "max": 9999999999999999.99,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "defaultSlPct",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": true,
+          "max": 100,
+          "maxExclusive": true,
+          "scale": 4
+        },
+        {
+          "field": "defaultTargetPct",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": true,
+          "max": 999.9999,
+          "maxExclusive": false,
+          "scale": 4
+        },
+        {
+          "field": "minRiskRewardRatio",
+          "type": "number",
+          "required": true,
+          "min": 1,
+          "minExclusive": false,
+          "max": 9999.99,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "maxSlPct",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": true,
+          "max": 100,
+          "maxExclusive": true,
+          "scale": 4
+        },
+        {
+          "field": "breakevenTriggerPct",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": true,
+          "max": 100,
+          "maxExclusive": false,
+          "scale": 4
+        },
+        {
+          "field": "trailingSlStepPct",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": true,
+          "max": 100,
+          "maxExclusive": true,
+          "scale": 4
+        },
+        {
+          "field": "maxDailyLoss",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": true,
+          "max": 9999999999999999.99,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "maxDailyProfit",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": true,
+          "max": 9999999999999999.99,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "maxOpenTrades",
+          "type": "integer",
+          "required": true,
+          "min": 1,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "maxLotsPerTrade",
+          "type": "integer",
+          "required": true,
+          "min": 1,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "maxTradesPerDay",
+          "type": "integer",
+          "required": true,
+          "min": 1,
+          "minExclusive": false,
+          "max": 100,
+          "maxExclusive": false
+        },
+        {
+          "field": "reentryCooldownMinutes",
+          "type": "integer",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 240,
+          "maxExclusive": false
+        },
+        {
+          "field": "lotMultiplier",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": true,
+          "max": 1,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "minPatternConfidence",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 100,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "blockTradeOnOpposingNews",
+          "type": "boolean",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "slippageBufferPct",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 5,
+          "maxExclusive": false,
+          "scale": 4
+        },
+        {
+          "field": "simulatedSlippagePct",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 5,
+          "maxExclusive": false,
+          "scale": 4
+        },
+        {
+          "field": "simulatedBrokeragePerOrder",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 9999999999999999.99,
+          "maxExclusive": false,
+          "scale": 2
+        }
+      ],
+      "crossFieldRules": [
+        {
+          "code": "CX_PREMIUM_BAND",
+          "fields": [
+            "minSingleTradePrice",
+            "maxSingleTradePrice"
+          ],
+          "message": "Max premium must be greater than min premium."
+        },
+        {
+          "code": "CX_MAX_SL_GTE_DEFAULT_SL",
+          "fields": [
+            "defaultSlPct",
+            "maxSlPct"
+          ],
+          "message": "Max SL % must be at least the default SL %."
+        },
+        {
+          "code": "CX_FALLBACK_RR",
+          "fields": [
+            "defaultSlPct",
+            "defaultTargetPct",
+            "minRiskRewardRatio"
+          ],
+          "message": "Default target % must be at least default SL % \u00D7 min risk-reward."
+        },
+        {
+          "code": "CX_DAILY_LOSS_LTE_CAPITAL",
+          "fields": [
+            "maxDailyLoss",
+            "allocatedCapital"
+          ],
+          "message": "Max daily loss cannot exceed allocated capital."
+        }
+      ]
+    },
+    {
+      "form": "tradingAccount",
+      "fields": [
+        {
+          "field": "accountName",
+          "type": "string",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "maxLength": 100
+        },
+        {
+          "field": "clientId",
+          "type": "string",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "maxLength": 50,
+          "pattern": "^[A-Za-z0-9_-]\u002B$"
+        },
+        {
+          "field": "userName",
+          "type": "string",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "maxLength": 150
+        },
+        {
+          "field": "email",
+          "type": "string",
+          "required": false,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "maxLength": 254,
+          "pattern": "^[^@\\s]\u002B@[^@\\s]\u002B\\.[^@\\s]\u002B$"
+        },
+        {
+          "field": "phone",
+          "type": "string",
+          "required": false,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "maxLength": 20,
+          "pattern": "^[6-9][0-9]{9}$"
+        },
+        {
+          "field": "brokerBranch",
+          "type": "string",
+          "required": false,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "maxLength": 100
+        },
+        {
+          "field": "loginId",
+          "type": "string",
+          "required": false,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "maxLength": 100
+        },
+        {
+          "field": "totpSecret",
+          "type": "string",
+          "required": false,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "maxLength": 128,
+          "pattern": "^[A-Z2-7]{16,}=*$"
+        },
+        {
+          "field": "isDataProvider",
+          "type": "boolean",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "isActive",
+          "type": "boolean",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        }
+      ],
+      "crossFieldRules": [
+        {
+          "code": "CX_DATA_PROVIDER_CREDENTIALS",
+          "fields": [
+            "isDataProvider",
+            "isActive",
+            "apiKey",
+            "apiSecret"
+          ],
+          "message": "The active market-data provider needs an API key and secret."
+        }
+      ]
+    },
+    {
+      "form": "geminiConfig",
+      "fields": [
+        {
+          "field": "modelName",
+          "type": "string",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "maxLength": 100,
+          "pattern": "^[a-z0-9][a-z0-9.\\-]*$"
+        },
+        {
+          "field": "useSearchGrounding",
+          "type": "boolean",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "premarketScanTime",
+          "type": "time",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "intradayPollSeconds",
+          "type": "integer",
+          "required": true,
+          "min": 10,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "volumeSpikeTriggerMultiplier",
+          "type": "number",
+          "required": true,
+          "min": 1,
+          "minExclusive": true,
+          "max": 9999.99,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "patternWeightPct",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 100,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "newsWeightPct",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 100,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "oiGreeksWeightPct",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 100,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "vetoMinImpactLevel",
+          "type": "enum",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "allowedValues": [
+            "LOW",
+            "MEDIUM",
+            "HIGH",
+            "EXTREME_HALT"
+          ]
+        },
+        {
+          "field": "autoPauseOnExtremeMacro",
+          "type": "boolean",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "maxCallsPerMinute",
+          "type": "integer",
+          "required": true,
+          "min": 1,
+          "minExclusive": false,
+          "maxExclusive": false
+        }
+      ],
+      "crossFieldRules": [
+        {
+          "code": "CX_WEIGHTS_SUM_100",
+          "fields": [
+            "patternWeightPct",
+            "newsWeightPct",
+            "oiGreeksWeightPct"
+          ],
+          "message": "Pattern, news and OI/Greeks weights must add up to 100."
+        },
+        {
+          "code": "CX_PREMARKET_BEFORE_OPEN",
+          "fields": [
+            "premarketScanTime"
+          ],
+          "message": "Pre-market scan must run before 09:15."
+        }
+      ]
+    },
+    {
+      "form": "strategyConfig",
+      "fields": [
+        {
+          "field": "strikeSelection",
+          "type": "enum",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "allowedValues": [
+            "ATM",
+            "ITM1",
+            "OTM1",
+            "DELTA_TARGET"
+          ]
+        },
+        {
+          "field": "expiryPolicy",
+          "type": "enum",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "allowedValues": [
+            "NEAREST_SKIP_EXPIRY_DAY",
+            "NEAREST",
+            "MONTHLY_ONLY"
+          ]
+        },
+        {
+          "field": "product",
+          "type": "enum",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "allowedValues": [
+            "I",
+            "M",
+            "B"
+          ]
+        },
+        {
+          "field": "trendTimeframe",
+          "type": "enum",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "allowedValues": [
+            "1m",
+            "3m",
+            "5m",
+            "15m",
+            "1h",
+            "1d"
+          ]
+        },
+        {
+          "field": "triggerTimeframe",
+          "type": "enum",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "allowedValues": [
+            "1m",
+            "3m",
+            "5m",
+            "15m",
+            "1h",
+            "1d"
+          ]
+        },
+        {
+          "field": "requireOptionConfirmation",
+          "type": "boolean",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "minCombinedConfidence",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 100,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "entryStartTime",
+          "type": "time",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "entryCutoffTime",
+          "type": "time",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "squareOffTime",
+          "type": "time",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "authLoginTime",
+          "type": "time",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "authMaxRetries",
+          "type": "integer",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 10,
+          "maxExclusive": false
+        },
+        {
+          "field": "slLimitBufferPct",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": true,
+          "max": 10,
+          "maxExclusive": false,
+          "scale": 4
+        },
+        {
+          "field": "slGapFallbackSeconds",
+          "type": "integer",
+          "required": true,
+          "min": 1,
+          "minExclusive": false,
+          "max": 30,
+          "maxExclusive": false
+        },
+        {
+          "field": "entryFillTimeoutSeconds",
+          "type": "integer",
+          "required": true,
+          "min": 2,
+          "minExclusive": false,
+          "max": 60,
+          "maxExclusive": false
+        },
+        {
+          "field": "stockWatchlistSize",
+          "type": "integer",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 50,
+          "maxExclusive": false
+        },
+        {
+          "field": "historyBackfillDays",
+          "type": "integer",
+          "required": true,
+          "min": 1,
+          "minExclusive": false,
+          "max": 30,
+          "maxExclusive": false
+        }
+      ],
+      "crossFieldRules": [
+        {
+          "code": "CX_SESSION_TIMES",
+          "fields": [
+            "entryStartTime",
+            "entryCutoffTime",
+            "squareOffTime"
+          ],
+          "message": "Times must satisfy 09:15 \u2264 entry start \u003C entry cutoff \u003C square-off \u2264 15:29."
+        },
+        {
+          "code": "CX_AUTH_BEFORE_ENTRY",
+          "fields": [
+            "authLoginTime",
+            "entryStartTime"
+          ],
+          "message": "Auto-login must run before the entry window opens."
+        },
+        {
+          "code": "CX_TREND_TF_ABOVE_TRIGGER",
+          "fields": [
+            "trendTimeframe",
+            "triggerTimeframe"
+          ],
+          "message": "Trend timeframe must be higher than the trigger timeframe."
+        }
+      ]
+    },
+    {
+      "form": "chartPattern",
+      "fields": [
+        {
+          "field": "patternCode",
+          "type": "string",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "maxLength": 60,
+          "pattern": "^[A-Z0-9_]\u002B$"
+        },
+        {
+          "field": "patternName",
+          "type": "string",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "maxLength": 120
+        },
+        {
+          "field": "category",
+          "type": "enum",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "allowedValues": [
+            "CANDLESTICK",
+            "CLASSICAL",
+            "HARMONIC",
+            "SMC_STRUCTURE"
+          ]
+        },
+        {
+          "field": "direction",
+          "type": "enum",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "allowedValues": [
+            "BULLISH",
+            "BEARISH",
+            "NEUTRAL",
+            "BIDIRECTIONAL"
+          ]
+        },
+        {
+          "field": "minCandlesRequired",
+          "type": "integer",
+          "required": true,
+          "min": 1,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "defaultWeight",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "minExclusive": false,
+          "max": 100,
+          "maxExclusive": false,
+          "scale": 2
+        },
+        {
+          "field": "requireVolumeConfirm",
+          "type": "boolean",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "requireBreakoutClose",
+          "type": "boolean",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "patternParameters",
+          "type": "json",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "isActive",
+          "type": "boolean",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        }
+      ],
+      "crossFieldRules": []
+    },
+    {
+      "form": "modeToggle",
+      "fields": [
+        {
+          "field": "targetMode",
+          "type": "enum",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "allowedValues": [
+            "PAPER",
+            "REAL"
+          ]
+        },
+        {
+          "field": "accountClientId",
+          "type": "string",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "maxLength": 50
+        },
+        {
+          "field": "confirmClientId",
+          "type": "string",
+          "required": false,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "maxLength": 50
+        }
+      ],
+      "crossFieldRules": [
+        {
+          "code": "CX_REAL_CONFIRMATION",
+          "fields": [
+            "targetMode",
+            "confirmClientId",
+            "accountClientId"
+          ],
+          "message": "Type the account\u0027s client ID to confirm switching to REAL."
+        }
+      ]
+    },
+    {
+      "form": "marketHoliday",
+      "fields": [
+        {
+          "field": "holidayDate",
+          "type": "date",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "exchange",
+          "type": "enum",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "allowedValues": [
+            "NSE",
+            "BSE"
+          ]
+        },
+        {
+          "field": "description",
+          "type": "string",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false,
+          "maxLength": 200
+        },
+        {
+          "field": "isSpecialSession",
+          "type": "boolean",
+          "required": true,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "sessionOpenTime",
+          "type": "time",
+          "required": false,
+          "minExclusive": false,
+          "maxExclusive": false
+        },
+        {
+          "field": "sessionCloseTime",
+          "type": "time",
+          "required": false,
+          "minExclusive": false,
+          "maxExclusive": false
+        }
+      ],
+      "crossFieldRules": [
+        {
+          "code": "CX_SPECIAL_SESSION_TIMES",
+          "fields": [
+            "isSpecialSession",
+            "sessionOpenTime",
+            "sessionCloseTime"
+          ],
+          "message": "Special sessions need open \u003C close; regular holidays must have no session times."
+        }
+      ]
+    }
+  ],
+  "fixedLimits": {
+    "marketOpen": "09:15:00",
+    "marketCloseExclusive": "15:30:00",
+    "maxTickAgeSeconds": "3",
+    "tokenExpiryBufferMinutes": "15",
+    "newsVetoMinConstituentWeightPct": "5"
+  }
+}

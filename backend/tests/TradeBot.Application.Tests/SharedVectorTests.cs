@@ -48,6 +48,20 @@ public sealed class SharedVectorTests
         Assert.Equal(Expected(c), actual);
     }
 
+    /// <summary>The Angular suite validates against this snapshot of GET /api/validation/rules; regenerate with UPDATE_SNAPSHOTS=1.</summary>
+    [Fact]
+    public void Rules_document_snapshot_is_current()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !Directory.Exists(Path.Combine(dir.FullName, "shared", "validation"))) dir = dir.Parent;
+        var path = Path.Combine(dir!.FullName, "shared", "validation", "rules-document.json");
+        var json = System.Text.Json.JsonSerializer.Serialize(ValidationRulesDocument.Build(),
+            new System.Text.Json.JsonSerializerOptions(ValidationRulesDocument.Json) { WriteIndented = true }) + "\n";
+        if (Environment.GetEnvironmentVariable("UPDATE_SNAPSHOTS") == "1") File.WriteAllText(path, json);
+        Assert.True(File.Exists(path) && File.ReadAllText(path) == json,
+            "shared/validation/rules-document.json is stale: run `UPDATE_SNAPSHOTS=1 dotnet test --filter Rules_document_snapshot_is_current`.");
+    }
+
     [Fact]
     public void Every_form_and_cross_rule_is_covered_by_a_failing_vector()
     {
