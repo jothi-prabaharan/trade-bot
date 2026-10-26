@@ -22,6 +22,7 @@ var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
 var auth = config.GetSection("Auth").Get<AuthOptions>() ?? new AuthOptions();
 
+builder.Services.AddSystemd();
 builder.Services.AddSingleton(auth);
 builder.Services.AddSingleton<JwtIssuer>();
 builder.Services.AddTradeBotInfrastructure(config);

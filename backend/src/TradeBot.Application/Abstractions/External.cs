@@ -96,7 +96,7 @@ public static class EventChannels
 {
     public const string TokensUpdated = "tradebot_tokens_updated";      // payload: account_id
     public const string NewsUpdated = "tradebot_news_updated";          // payload: instrument_id or "all"
-    public const string NewsCheckRequested = "tradebot_news_check";     // payload: instrument_id
+    public const string NewsCheckRequested = "tradebot_news_check";     // payload: instrument_id (spike) or manual:{instrument_id|all}
     public const string ConfigChanged = "tradebot_config_changed";      // payload: table name
     public const string LoginRequested = "tradebot_login_requested";    // payload: account_id
 }

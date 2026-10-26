@@ -1378,7 +1378,7 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_company_daily_news_news_category", "news_category IN ('EARNINGS', 'CORPORATE_ACTION', 'REGULATORY', 'MERGER_ACQUISITION', 'MANAGEMENT', 'ORDER_WIN', 'RATING', 'LEGAL', 'SECTOR', 'MACRO', 'GLOBAL', 'OTHER')");
 
-                            t.HasCheckConstraint("ck_company_daily_news_scan_type", "scan_type IN ('PREMARKET', 'INTRADAY_SPIKE', 'MANUAL')");
+                            t.HasCheckConstraint("ck_company_daily_news_scan_type", "scan_type IN ('PREMARKET', 'INTRADAY_SPIKE', 'MANUAL', 'PERIODIC')");
 
                             t.HasCheckConstraint("ck_company_daily_news_sentiment", "sentiment IN ('BULLISH', 'BEARISH', 'NEUTRAL')");
 

@@ -166,7 +166,7 @@ public sealed class NewsIntelligenceController(IConfigRepository configs, IIntel
     public async Task<IActionResult> Scan(ScanRequest request, CancellationToken ct)
     {
         if (request.InstrumentId is { } id && config.Instrument(id) is null) return NotFound();
-        await bus.PublishAsync(EventChannels.NewsCheckRequested, request.InstrumentId?.ToString() ?? "all", ct);
+        await bus.PublishAsync(EventChannels.NewsCheckRequested, $"manual:{request.InstrumentId?.ToString() ?? "all"}", ct);
         return Accepted();
     }
 }

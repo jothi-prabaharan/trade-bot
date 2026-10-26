@@ -1,8 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TradeBot.Application.Abstractions;
+using TradeBot.Application.Auth;
 using TradeBot.Application.Engine;
 using TradeBot.Application.Market;
+using TradeBot.Application.News;
 
 namespace TradeBot.Application;
 
@@ -37,4 +39,12 @@ public static class DependencyInjection
         services.AddSingleton<DashboardService>();
         return services;
     }
+
+    /// <summary>TradeBot.Worker.News: Gemini scans and sentiment aggregation.</summary>
+    public static IServiceCollection AddTradeBotNews(this IServiceCollection services) =>
+        services.AddSingleton<NewsIntelligenceService>().AddSingleton<NewsScheduler>();
+
+    /// <summary>TradeBot.Worker.Auth: daily headless broker logins.</summary>
+    public static IServiceCollection AddTradeBotBrokerAuth(this IServiceCollection services) =>
+        services.AddSingleton<BrokerAuthService>().AddSingleton<AuthScheduler>();
 }

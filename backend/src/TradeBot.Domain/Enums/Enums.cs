@@ -65,7 +65,7 @@ public enum ImpactLevel { Low, Medium, High, ExtremeHalt }
 
 public enum NewsCategory { Earnings, CorporateAction, Regulatory, MergerAcquisition, Management, OrderWin, Rating, Legal, Sector, Macro, Global, Other }
 
-public enum NewsScanType { Premarket, IntradaySpike, Manual }
+public enum NewsScanType { Premarket, IntradaySpike, Manual, Periodic }
 
 public enum Timeframe
 {
