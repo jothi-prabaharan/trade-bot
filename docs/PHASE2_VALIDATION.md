@@ -110,7 +110,7 @@ Field error codes: `FIELD_REQUIRED`, `FIELD_TYPE`, `FIELD_MIN`, `FIELD_MAX`, `FI
 
 ## 5. How parity is enforced
 - **Backend ↔ DB:** `FormDbParityTests` inserts every DB-expressible vector and asserts that PostgreSQL accepts exactly what the validator accepts (47 cases).
-- **Backend ↔ Angular:** Angular builds its form validators from `GET /api/validation/rules` (Phase 3 endpoint, payload `ValidationRulesDocument`). It implements each `CX_*` code once and must pass `shared/validation/validation-vectors.json` (94 vectors).
+- **Backend ↔ Angular:** Angular builds its form validators from `GET /api/validation/rules` (Phase 3 endpoint, payload `ValidationRulesDocument`). It implements each `CX_*` code once and must pass `shared/validation/validation-vectors.json` (104 vectors).
 - **Catalog integrity:** tests check that every `RuleCodes` constant is catalogued and every cross-field rule has a failing vector.
 
-Test totals: **175** Application unit tests + **62** PostgreSQL integration tests, all passing.
+Test totals at the end of Phase 2: 175 Application unit tests + 62 PostgreSQL integration tests. Current totals are in [PHASE3_BACKEND.md](PHASE3_BACKEND.md#12-tests).

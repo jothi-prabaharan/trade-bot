@@ -8,6 +8,7 @@
     <Project Path="src/TradeBot.Worker.News/TradeBot.Worker.News.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/TradeBot.Api.Tests/TradeBot.Api.Tests.csproj" />
     <Project Path="tests/TradeBot.Application.Tests/TradeBot.Application.Tests.csproj" />
     <Project Path="tests/TradeBot.Infrastructure.Tests/TradeBot.Infrastructure.Tests.csproj" />
   </Folder>

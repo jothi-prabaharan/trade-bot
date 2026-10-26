@@ -112,5 +112,9 @@ public static class DashboardSocket
         catch (WebSocketException e) { log.LogDebug(e, "Dashboard socket closed"); }
         await cts.CancelAsync();
         try { await reader; } catch { /* reader ends with the socket */ }
+        // Complete the close handshake the client started (sent only after the push loop has stopped)
+        if (ws.State == WebSocketState.CloseReceived)
+            try { await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None); }
+            catch (WebSocketException) { /* client already gone */ }
     }
 }
