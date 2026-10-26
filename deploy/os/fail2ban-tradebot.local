@@ -1,0 +1,14 @@
+# /etc/fail2ban/jail.d/tradebot.local
+[sshd]
+enabled = true
+maxretry = 5
+findtime = 10m
+bantime = 1h
+
+[nginx-limit-req]
+enabled = true
+port = http,https
+logpath = /var/log/nginx/error.log
+maxretry = 10
+findtime = 10m
+bantime = 1h

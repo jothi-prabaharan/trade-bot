@@ -8,6 +8,7 @@ using TradeBot.Infrastructure.External;
 using TradeBot.Infrastructure.External.Gemini;
 using TradeBot.Infrastructure.External.Paytm;
 using TradeBot.Infrastructure.Persistence;
+using TradeBot.Infrastructure.Seeding;
 using TradeBot.Infrastructure.Repositories;
 using TradeBot.Infrastructure.Security;
 
@@ -64,6 +65,7 @@ public static class DependencyInjection
         services.AddSingleton<IMarketFeed, PaytmMarketFeed>();
         services.AddSingleton<IScripMasterSync, ScripMasterSync>();
         services.AddSingleton<IBrokerLoginAutomation, PlaywrightBrokerLogin>();
+        services.AddSingleton<ReferenceDataSeeder>();
 
         services.AddSingleton(sp => new PgEventBus(cs, sp.GetRequiredService<ILogger<PgEventBus>>()));
         services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<PgEventBus>());

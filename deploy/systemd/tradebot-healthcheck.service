@@ -1,0 +1,6 @@
+[Unit]
+Description=TradeBot health check (services, API, PostgreSQL, feed, disk, clock, backups)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/tradebot-healthcheck

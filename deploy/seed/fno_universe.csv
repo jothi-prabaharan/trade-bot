@@ -1,0 +1,226 @@
+# TradeBot F&O stock universe and index weights (NIFTY 50 / BANK NIFTY / FIN NIFTY), snapshot 2026-10-26.
+# Weights are approximate free-float estimates (each index sums to 100; Bank/Fin Nifty respect SEBI caps:
+# top stock <= 20%, top three <= 45%). Verify against the NSE Indices monthly factsheets and re-import:
+#   tradebotctl seed --stocks /opt/tradebot/current/seed/fno_universe.csv
+# The daily scrip-master sync adds new F&O stocks and flags ones that left the segment.
+symbol,company_name,sector,nifty50_weight_pct,banknifty_weight_pct,finnifty_weight_pct
+360ONE,360 ONE WAM Ltd,Capital Markets,0.00,0.00,0.00
+ABB,ABB India Ltd,Capital Goods,0.00,0.00,0.00
+ABCAPITAL,Aditya Birla Capital Ltd,Financial Services,0.00,0.00,0.00
+ADANIENSOL,Adani Energy Solutions Ltd,Power,0.00,0.00,0.00
+ADANIENT,Adani Enterprises Ltd,Metals & Mining,0.52,0.00,0.00
+ADANIGREEN,Adani Green Energy Ltd,Power,0.00,0.00,0.00
+ADANIPORTS,Adani Ports and Special Economic Zone Ltd,Services,0.93,0.00,0.00
+ADANIPOWER,Adani Power Ltd,Power,0.00,0.00,0.00
+ALKEM,Alkem Laboratories Ltd,Pharma,0.00,0.00,0.00
+AMBER,Amber Enterprises India Ltd,Consumer Durables,0.00,0.00,0.00
+AMBUJACEM,Ambuja Cements Ltd,Cement,0.00,0.00,0.00
+ANGELONE,Angel One Ltd,Capital Markets,0.00,0.00,0.00
+APLAPOLLO,APL Apollo Tubes Ltd,Metals,0.00,0.00,0.00
+APOLLOHOSP,Apollo Hospitals Enterprise Ltd,Healthcare,0.62,0.00,0.00
+ASHOKLEY,Ashok Leyland Ltd,Automobile,0.00,0.00,0.00
+ASIANPAINT,Asian Paints Ltd,Consumer Durables,0.93,0.00,0.00
+ASTRAL,Astral Ltd,Industrials,0.00,0.00,0.00
+ATHERENERG,Ather Energy Ltd,Automobile,0.00,0.00,0.00
+AUBANK,AU Small Finance Bank Ltd,Banks,0.00,3.50,0.00
+AUROPHARMA,Aurobindo Pharma Ltd,Pharma,0.00,0.00,0.00
+AXISBANK,Axis Bank Ltd,Banks,3.30,10.00,11.00
+BAJAJ-AUTO,Bajaj Auto Ltd,Automobile,0.83,0.00,0.00
+BAJAJFINSV,Bajaj Finserv Ltd,Financial Services,0.93,0.00,3.50
+BAJFINANCE,Bajaj Finance Ltd,Financial Services,2.48,0.00,8.00
+BANDHANBNK,Bandhan Bank Ltd,Banks,0.00,0.00,0.00
+BANKBARODA,Bank of Baroda,Banks,0.00,5.00,0.00
+BANKINDIA,Bank of India,Banks,0.00,0.00,0.00
+BDL,Bharat Dynamics Ltd,Defence,0.00,0.00,0.00
+BEL,Bharat Electronics Ltd,Defence,1.34,0.00,0.00
+BHARATFORG,Bharat Forge Ltd,Automobile,0.00,0.00,0.00
+BHARTIARTL,Bharti Airtel Ltd,Telecom,5.06,0.00,0.00
+BHEL,Bharat Heavy Electricals Ltd,Capital Goods,0.00,0.00,0.00
+BIOCON,Biocon Ltd,Pharma,0.00,0.00,0.00
+BLUESTARCO,Blue Star Ltd,Consumer Durables,0.00,0.00,0.00
+BOSCHLTD,Bosch Ltd,Automobile,0.00,0.00,0.00
+BPCL,Bharat Petroleum Corporation Ltd,Oil & Gas,0.00,0.00,0.00
+BRITANNIA,Britannia Industries Ltd,FMCG,0.00,0.00,0.00
+BSE,BSE Ltd,Capital Markets,0.00,0.00,1.50
+CAMS,Computer Age Management Services Ltd,Capital Markets,0.00,0.00,0.00
+CANBK,Canara Bank,Banks,0.00,4.50,0.00
+CDSL,Central Depository Services (India) Ltd,Capital Markets,0.00,0.00,0.00
+CGPOWER,CG Power and Industrial Solutions Ltd,Capital Goods,0.00,0.00,0.00
+CHOLAFIN,Cholamandalam Investment and Finance Company Ltd,Financial Services,0.00,0.00,3.00
+CIPLA,Cipla Ltd,Pharma,0.72,0.00,0.00
+COALINDIA,Coal India Ltd,Mining,0.72,0.00,0.00
+COCHINSHIP,Cochin Shipyard Ltd,Defence,0.00,0.00,0.00
+COFORGE,Coforge Ltd,IT,0.00,0.00,0.00
+COLPAL,Colgate-Palmolive (India) Ltd,FMCG,0.00,0.00,0.00
+CONCOR,Container Corporation of India Ltd,Services,0.00,0.00,0.00
+COROMANDEL,Coromandel International Ltd,Chemicals,0.00,0.00,0.00
+CROMPTON,Crompton Greaves Consumer Electricals Ltd,Consumer Durables,0.00,0.00,0.00
+CUB,City Union Bank Ltd,Banks,0.00,0.00,0.00
+CUMMINSIND,Cummins India Ltd,Capital Goods,0.00,0.00,0.00
+DABUR,Dabur India Ltd,FMCG,0.00,0.00,0.00
+DALBHARAT,Dalmia Bharat Ltd,Cement,0.00,0.00,0.00
+DATAPATTNS,Data Patterns (India) Ltd,Defence,0.00,0.00,0.00
+DELHIVERY,Delhivery Ltd,Services,0.00,0.00,0.00
+DIVISLAB,Divi's Laboratories Ltd,Pharma,0.00,0.00,0.00
+DIXON,Dixon Technologies (India) Ltd,Consumer Durables,0.00,0.00,0.00
+DLF,DLF Ltd,Realty,0.00,0.00,0.00
+DMART,Avenue Supermarts Ltd,Retail,0.00,0.00,0.00
+DRREDDY,Dr. Reddy's Laboratories Ltd,Pharma,0.62,0.00,0.00
+EICHERMOT,Eicher Motors Ltd,Automobile,0.72,0.00,0.00
+ETERNAL,Eternal Ltd,Consumer Services,1.65,0.00,0.00
+EXIDEIND,Exide Industries Ltd,Automobile,0.00,0.00,0.00
+FEDERALBNK,The Federal Bank Ltd,Banks,0.00,4.50,0.00
+FORTIS,Fortis Healthcare Ltd,Healthcare,0.00,0.00,0.00
+GAIL,GAIL (India) Ltd,Oil & Gas,0.00,0.00,0.00
+GLENMARK,Glenmark Pharmaceuticals Ltd,Pharma,0.00,0.00,0.00
+GMRAIRPORT,GMR Airports Ltd,Services,0.00,0.00,0.00
+GODFRYPHLP,Godfrey Phillips India Ltd,FMCG,0.00,0.00,0.00
+GODREJCP,Godrej Consumer Products Ltd,FMCG,0.00,0.00,0.00
+GODREJPROP,Godrej Properties Ltd,Realty,0.00,0.00,0.00
+GRASIM,Grasim Industries Ltd,Cement,0.83,0.00,0.00
+HAL,Hindustan Aeronautics Ltd,Defence,0.00,0.00,0.00
+HAVELLS,Havells India Ltd,Consumer Durables,0.00,0.00,0.00
+HCLTECH,HCL Technologies Ltd,IT,1.55,0.00,0.00
+HDFCAMC,HDFC Asset Management Company Ltd,Capital Markets,0.00,0.00,1.50
+HDFCBANK,HDFC Bank Ltd,Banks,10.16,19.50,19.00
+HDFCLIFE,HDFC Life Insurance Company Ltd,Insurance,0.72,0.00,2.50
+HEROMOTOCO,Hero MotoCorp Ltd,Automobile,0.00,0.00,0.00
+HINDALCO,Hindalco Industries Ltd,Metals,1.03,0.00,0.00
+HINDPETRO,Hindustan Petroleum Corporation Ltd,Oil & Gas,0.00,0.00,0.00
+HINDUNILVR,Hindustan Unilever Ltd,FMCG,1.96,0.00,0.00
+HINDZINC,Hindustan Zinc Ltd,Metals,0.00,0.00,0.00
+HUDCO,Housing & Urban Development Corporation Ltd,Financial Services,0.00,0.00,0.00
+HYUNDAI,Hyundai Motor India Ltd,Automobile,0.00,0.00,0.00
+ICICIBANK,ICICI Bank Ltd,Banks,9.76,15.50,15.00
+ICICIGI,ICICI Lombard General Insurance Company Ltd,Insurance,0.00,0.00,1.50
+ICICIPRULI,ICICI Prudential Life Insurance Company Ltd,Insurance,0.00,0.00,0.00
+IDEA,Vodafone Idea Ltd,Telecom,0.00,0.00,0.00
+IDFCFIRSTB,IDFC First Bank Ltd,Banks,0.00,3.50,0.00
+IEX,Indian Energy Exchange Ltd,Capital Markets,0.00,0.00,0.00
+IGL,Indraprastha Gas Ltd,Oil & Gas,0.00,0.00,0.00
+IIFL,IIFL Finance Ltd,Financial Services,0.00,0.00,0.00
+INDHOTEL,The Indian Hotels Company Ltd,Hospitality,0.00,0.00,0.00
+INDIANB,Indian Bank,Banks,0.00,0.00,0.00
+INDIGO,InterGlobe Aviation Ltd,Aviation,1.03,0.00,0.00
+INDUSINDBK,IndusInd Bank Ltd,Banks,0.00,4.00,0.00
+INDUSTOWER,Indus Towers Ltd,Telecom,0.00,0.00,0.00
+INFY,Infosys Ltd,IT,4.75,0.00,0.00
+INOXWIND,Inox Wind Ltd,Capital Goods,0.00,0.00,0.00
+IOC,Indian Oil Corporation Ltd,Oil & Gas,0.00,0.00,0.00
+IRCTC,Indian Railway Catering and Tourism Corporation Ltd,Services,0.00,0.00,0.00
+IREDA,Indian Renewable Energy Development Agency Ltd,Financial Services,0.00,0.00,0.00
+IRFC,Indian Railway Finance Corporation Ltd,Financial Services,0.00,0.00,0.00
+ITC,ITC Ltd,FMCG,3.41,0.00,0.00
+JINDALSTEL,Jindal Steel Ltd,Metals,0.00,0.00,0.00
+JIOFIN,Jio Financial Services Ltd,Financial Services,0.93,0.00,3.50
+JSWENERGY,JSW Energy Ltd,Power,0.00,0.00,0.00
+JSWSTEEL,JSW Steel Ltd,Metals,0.93,0.00,0.00
+JUBLFOOD,Jubilant FoodWorks Ltd,Consumer Services,0.00,0.00,0.00
+KALYANKJIL,Kalyan Jewellers India Ltd,Consumer Durables,0.00,0.00,0.00
+KARURVYSYA,Karur Vysya Bank Ltd,Banks,0.00,0.00,0.00
+KAYNES,Kaynes Technology India Ltd,Capital Goods,0.00,0.00,0.00
+KEI,KEI Industries Ltd,Capital Goods,0.00,0.00,0.00
+KFINTECH,KFin Technologies Ltd,Capital Markets,0.00,0.00,0.00
+KOTAKBANK,Kotak Mahindra Bank Ltd,Banks,2.79,9.50,8.00
+KPITTECH,KPIT Technologies Ltd,IT,0.00,0.00,0.00
+LAURUSLABS,Laurus Labs Ltd,Pharma,0.00,0.00,0.00
+LICHSGFIN,LIC Housing Finance Ltd,Financial Services,0.00,0.00,0.50
+LICI,Life Insurance Corporation of India,Insurance,0.00,0.00,0.00
+LODHA,Lodha Developers Ltd,Realty,0.00,0.00,0.00
+LT,Larsen & Toubro Ltd,Construction,4.03,0.00,0.00
+LTF,L&T Finance Ltd,Financial Services,0.00,0.00,0.00
+LTIM,LTIMindtree Ltd,IT,0.00,0.00,0.00
+LUPIN,Lupin Ltd,Pharma,0.00,0.00,0.00
+M&M,Mahindra & Mahindra Ltd,Automobile,2.69,0.00,0.00
+M&MFIN,Mahindra & Mahindra Financial Services Ltd,Financial Services,0.00,0.00,0.00
+MAHABANK,Bank of Maharashtra,Banks,0.00,0.00,0.00
+MANAPPURAM,Manappuram Finance Ltd,Financial Services,0.00,0.00,0.00
+MANKIND,Mankind Pharma Ltd,Pharma,0.00,0.00,0.00
+MARICO,Marico Ltd,FMCG,0.00,0.00,0.00
+MARUTI,Maruti Suzuki India Ltd,Automobile,1.76,0.00,0.00
+MAXHEALTH,Max Healthcare Institute Ltd,Healthcare,0.72,0.00,0.00
+MAZDOCK,Mazagon Dock Shipbuilders Ltd,Defence,0.00,0.00,0.00
+MCX,Multi Commodity Exchange of India Ltd,Capital Markets,0.00,0.00,0.00
+MFSL,Max Financial Services Ltd,Insurance,0.00,0.00,0.00
+MOTHERSON,Samvardhana Motherson International Ltd,Automobile,0.00,0.00,0.00
+MOTILALOFS,Motilal Oswal Financial Services Ltd,Capital Markets,0.00,0.00,0.00
+MPHASIS,Mphasis Ltd,IT,0.00,0.00,0.00
+MUTHOOTFIN,Muthoot Finance Ltd,Financial Services,0.00,0.00,2.00
+NAM-INDIA,Nippon Life India Asset Management Ltd,Capital Markets,0.00,0.00,0.00
+NATIONALUM,National Aluminium Company Ltd,Metals,0.00,0.00,0.00
+NAUKRI,Info Edge (India) Ltd,Consumer Services,0.00,0.00,0.00
+NAVINFLUOR,Navin Fluorine International Ltd,Chemicals,0.00,0.00,0.00
+NBCC,NBCC (India) Ltd,Construction,0.00,0.00,0.00
+NESTLEIND,Nestle India Ltd,FMCG,0.62,0.00,0.00
+NHPC,NHPC Ltd,Power,0.00,0.00,0.00
+NMDC,NMDC Ltd,Mining,0.00,0.00,0.00
+NTPC,NTPC Ltd,Power,1.45,0.00,0.00
+NUVAMA,Nuvama Wealth Management Ltd,Capital Markets,0.00,0.00,0.00
+NYKAA,FSN E-Commerce Ventures Ltd,Retail,0.00,0.00,0.00
+OBEROIRLTY,Oberoi Realty Ltd,Realty,0.00,0.00,0.00
+OFSS,Oracle Financial Services Software Ltd,IT,0.00,0.00,0.00
+OIL,Oil India Ltd,Oil & Gas,0.00,0.00,0.00
+ONGC,Oil & Natural Gas Corporation Ltd,Oil & Gas,0.83,0.00,0.00
+PAGEIND,Page Industries Ltd,Textiles,0.00,0.00,0.00
+PATANJALI,Patanjali Foods Ltd,FMCG,0.00,0.00,0.00
+PAYTM,One 97 Communications Ltd,Financial Services,0.00,0.00,0.00
+PERSISTENT,Persistent Systems Ltd,IT,0.00,0.00,0.00
+PETRONET,Petronet LNG Ltd,Oil & Gas,0.00,0.00,0.00
+PFC,Power Finance Corporation Ltd,Financial Services,0.00,0.00,2.00
+PGEL,PG Electroplast Ltd,Consumer Durables,0.00,0.00,0.00
+PHOENIXLTD,The Phoenix Mills Ltd,Realty,0.00,0.00,0.00
+PIDILITIND,Pidilite Industries Ltd,Chemicals,0.00,0.00,0.00
+PIIND,PI Industries Ltd,Chemicals,0.00,0.00,0.00
+PNB,Punjab National Bank,Banks,0.00,4.50,0.00
+PNBHOUSING,PNB Housing Finance Ltd,Financial Services,0.00,0.00,0.00
+POLICYBZR,PB Fintech Ltd,Financial Services,0.00,0.00,0.00
+POLYCAB,Polycab India Ltd,Capital Goods,0.00,0.00,0.00
+POWERGRID,Power Grid Corporation of India Ltd,Power,1.14,0.00,0.00
+PPLPHARMA,Piramal Pharma Ltd,Pharma,0.00,0.00,0.00
+PRESTIGE,Prestige Estates Projects Ltd,Realty,0.00,0.00,0.00
+RBLBANK,RBL Bank Ltd,Banks,0.00,0.00,0.00
+RECLTD,REC Ltd,Financial Services,0.00,0.00,2.00
+RELIANCE,Reliance Industries Ltd,Oil & Gas,8.09,0.00,0.00
+RVNL,Rail Vikas Nigam Ltd,Construction,0.00,0.00,0.00
+SAGILITY,Sagility Ltd,IT,0.00,0.00,0.00
+SAIL,Steel Authority of India Ltd,Metals,0.00,0.00,0.00
+SBICARD,SBI Cards and Payment Services Ltd,Financial Services,0.00,0.00,0.50
+SBILIFE,SBI Life Insurance Company Ltd,Insurance,0.72,0.00,2.50
+SBIN,State Bank of India,Banks,3.51,10.00,9.00
+SHREECEM,Shree Cement Ltd,Cement,0.00,0.00,0.00
+SHRIRAMFIN,Shriram Finance Ltd,Financial Services,1.03,0.00,3.50
+SIEMENS,Siemens Ltd,Capital Goods,0.00,0.00,0.00
+SOLARINDS,Solar Industries India Ltd,Chemicals,0.00,0.00,0.00
+SONACOMS,Sona BLW Precision Forgings Ltd,Automobile,0.00,0.00,0.00
+SRF,SRF Ltd,Chemicals,0.00,0.00,0.00
+SUNPHARMA,Sun Pharmaceutical Industries Ltd,Pharma,1.65,0.00,0.00
+SUPREMEIND,Supreme Industries Ltd,Industrials,0.00,0.00,0.00
+SUZLON,Suzlon Energy Ltd,Capital Goods,0.00,0.00,0.00
+SYNGENE,Syngene International Ltd,Pharma,0.00,0.00,0.00
+SYRMA,Syrma SGS Technology Ltd,Capital Goods,0.00,0.00,0.00
+TATACONSUM,Tata Consumer Products Ltd,FMCG,0.62,0.00,0.00
+TATAELXSI,Tata Elxsi Ltd,IT,0.00,0.00,0.00
+TATAPOWER,Tata Power Company Ltd,Power,0.00,0.00,0.00
+TATASTEEL,Tata Steel Ltd,Metals,1.24,0.00,0.00
+TATATECH,Tata Technologies Ltd,IT,0.00,0.00,0.00
+TCS,Tata Consultancy Services Ltd,IT,2.89,0.00,0.00
+TECHM,Tech Mahindra Ltd,IT,0.83,0.00,0.00
+TIINDIA,Tube Investments of India Ltd,Automobile,0.00,0.00,0.00
+TITAN,Titan Company Ltd,Consumer Durables,1.34,0.00,0.00
+TMPV,Tata Motors Passenger Vehicles Ltd,Automobile,0.83,0.00,0.00
+TORNTPHARM,Torrent Pharmaceuticals Ltd,Pharma,0.00,0.00,0.00
+TORNTPOWER,Torrent Power Ltd,Power,0.00,0.00,0.00
+TRENT,Trent Ltd,Retail,0.93,0.00,0.00
+TVSMOTOR,TVS Motor Company Ltd,Automobile,0.00,0.00,0.00
+ULTRACEMCO,UltraTech Cement Ltd,Cement,1.24,0.00,0.00
+UNIONBANK,Union Bank of India,Banks,0.00,3.00,0.00
+UNITDSPR,United Spirits Ltd,FMCG,0.00,0.00,0.00
+UNOMINDA,Uno Minda Ltd,Automobile,0.00,0.00,0.00
+UPL,UPL Ltd,Chemicals,0.00,0.00,0.00
+VBL,Varun Beverages Ltd,FMCG,0.00,0.00,0.00
+VEDL,Vedanta Ltd,Metals,0.00,0.00,0.00
+VMM,Vishal Mega Mart Ltd,Retail,0.00,0.00,0.00
+VOLTAS,Voltas Ltd,Consumer Durables,0.00,0.00,0.00
+WIPRO,Wipro Ltd,IT,0.62,0.00,0.00
+YESBANK,Yes Bank Ltd,Banks,0.00,3.00,0.00
+ZYDUSLIFE,Zydus Lifesciences Ltd,Pharma,0.00,0.00,0.00

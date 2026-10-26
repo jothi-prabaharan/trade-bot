@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Every minute (tradebot-healthcheck.timer): services, API, PostgreSQL, market feed in session, disk, clock, backups, TLS.
+# Telegram alert when the set of problems changes (failure or recovery), repeated every 30 min while failing.
+set -uo pipefail
+# shellcheck source=../lib/common.sh
+. "${TRADEBOT_LIB:-/usr/local/lib/tradebot}/common.sh"
+load_conf
+
+problems=()
+add() { problems+=("$*"); }
+
+for unit in $TRADEBOT_SERVICES "postgresql@${TRADEBOT_PG_VERSION}-main" nginx; do
+  state=$(systemctl is-active "$unit" 2>/dev/null)
+  [ "$state" = active ] || add "$unit is ${state:-unknown}"
+done
+
+health=$(curl -fsS --max-time 5 "http://127.0.0.1:${TRADEBOT_API_PORT}/health" 2>/dev/null) || { add "API /health not responding"; health=""; }
+if [ -n "$health" ] && market_hours; then
+  ist=$(TZ=Asia/Kolkata date +%H%M)
+  if [ "$(jq -r '.engine.prepared' <<<"$health")" != true ] && [ "$ist" -ge 0910 ]; then
+    add "Engine not prepared for the session (broker login or scrip sync?)"
+  fi
+  if [ "$ist" -ge 0916 ] && [ "$ist" -le 1529 ]; then
+    if [ "$(jq -r '.engine.feedConnected' <<<"$health")" != true ]; then
+      add "Market feed disconnected"
+    else
+      last=$(jq -r '.engine.lastTickUtc // empty' <<<"$health")
+      if [ -n "$last" ]; then
+        age=$(( $(date +%s) - $(date -d "$last" +%s) ))
+        [ "$age" -le 120 ] || add "No market ticks for ${age}s"
+      fi
+    fi
+  fi
+fi
+
+runuser -u postgres -- pg_isready -q || add "PostgreSQL not accepting connections"
+
+for path in / /var/lib/postgresql "$TRADEBOT_BACKUPS"; do
+  [ -e "$path" ] || continue
+  used=$(df --output=pcent "$path" | tail -1 | tr -dc '0-9')
+  [ "${used:-0}" -lt 85 ] || add "Disk for $path at ${used}%"
+done
+
+if command -v chronyc > /dev/null; then
+  tracking=$(chronyc -n tracking 2>/dev/null)
+  [ "$(awk -F': ' '/Leap status/ {print $2}' <<<"$tracking")" = Normal ] || add "Clock not synchronised (chrony)"
+  offset=$(awk '/System time/ {print $4}' <<<"$tracking")
+  awk -v o="${offset:-0}" 'BEGIN { exit !(o > 0.5 || o < -0.5) }' && add "Clock offset ${offset}s"
+fi
+
+newest=$(find "$TRADEBOT_BACKUPS" -maxdepth 1 -name 'tradebot-*.dump' -printf '%T@\n' 2>/dev/null | sort -n | tail -1)
+installed=$(stat -c %Y "$TRADEBOT_ENV_FILE" 2>/dev/null || date +%s)
+if [ -n "$newest" ]; then
+  [ $(( $(date +%s) - ${newest%.*} )) -le 93600 ] || add "Newest backup is older than 26 h"
+elif [ $(( $(date +%s) - installed )) -gt 93600 ]; then
+  add "No backup has been written yet"
+fi
+
+cert="/etc/letsencrypt/live/${TRADEBOT_DOMAIN}/fullchain.pem"
+if [ -f "$cert" ] && ! openssl x509 -checkend 1209600 -noout -in "$cert" > /dev/null; then
+  add "TLS certificate expires within 14 days (certbot renew?)"
+fi
+
+state_file="$TRADEBOT_STATE/health.state"
+now=$(date +%s)
+current=$(printf '%s\n' "${problems[@]}")
+previous=""; last_alert=0
+if [ -f "$state_file" ]; then
+  last_alert=$(head -1 "$state_file")
+  previous=$(tail -n +2 "$state_file")
+fi
+
+if [ "$current" != "$previous" ]; then
+  if [ ${#problems[@]} -eq 0 ]; then notify "RECOVERED: all checks pass"
+  else notify "PROBLEM: $(printf '%s; ' "${problems[@]}")"; fi
+  last_alert=$now
+elif [ ${#problems[@]} -gt 0 ] && [ $(( now - last_alert )) -ge 1800 ]; then
+  notify "STILL FAILING: $(printf '%s; ' "${problems[@]}")"
+  last_alert=$now
+fi
+install -d -m 0750 "$TRADEBOT_STATE"
+printf '%s\n%s' "$last_alert" "$current" > "$state_file"
+
+if [ ${#problems[@]} -gt 0 ]; then
+  printf 'PROBLEM: %s\n' "${problems[@]}"
+  exit 1
+fi
+echo "OK"

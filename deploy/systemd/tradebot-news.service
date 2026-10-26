@@ -1,0 +1,45 @@
+[Unit]
+Description=TradeBot news worker (Gemini scans, sentiment)
+Documentation=file:///opt/tradebot/current/docs/PHASE5_DEPLOYMENT.md
+After=network-online.target postgresql@16-main.service
+Wants=network-online.target
+Requires=postgresql@16-main.service
+
+[Service]
+Type=notify
+User=tradebot
+Group=tradebot
+Slice=tradebot.slice
+WorkingDirectory=/opt/tradebot/current/news
+EnvironmentFile=/etc/tradebot/tradebot.env
+Environment=DOTNET_ENVIRONMENT=Production DOTNET_PROCESSOR_COUNT=2 DOTNET_gcServer=0 DOTNET_CLI_TELEMETRY_OPTOUT=1
+ExecStart=/usr/bin/dotnet /opt/tradebot/current/news/TradeBot.Worker.News.dll
+Restart=always
+RestartSec=5
+TimeoutStartSec=60
+TimeoutStopSec=20
+MemoryHigh=768M
+MemoryMax=1G
+UMask=0027
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+ReadWritePaths=/var/lib/tradebot
+
+[Install]
+WantedBy=multi-user.target

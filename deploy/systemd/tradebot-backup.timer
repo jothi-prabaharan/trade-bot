@@ -1,0 +1,10 @@
+[Unit]
+Description=TradeBot backups after the market close and nightly (IST)
+
+[Timer]
+OnCalendar=*-*-* 15:50:00 Asia/Kolkata
+OnCalendar=*-*-* 23:45:00 Asia/Kolkata
+Persistent=true
+
+[Install]
+WantedBy=timers.target

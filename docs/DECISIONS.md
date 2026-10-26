@@ -87,3 +87,16 @@
 | Confirmations | Manual exit: confirm dialog. Kill switch: type `KILL` + reason. PAPER→REAL: type the client ID. REAL→PAPER: confirm dialog |
 | Alerts | Toasts for trade, rejection and login events; sound on critical events; mute toggle |
 | Tests | Vitest (unit + all shared validation vectors) and Playwright e2e against the real API with a PAPER account |
+
+## Phase 5 — Deployment
+| Item | Decision |
+|---|---|
+| OS | Ubuntu 24.04 LTS; PostgreSQL 16 and .NET 10 from Ubuntu, Node 24 from NodeSource |
+| Server | Shared 64 GB / 16-core host; TradeBot (incl. PostgreSQL) capped at **16 GB / 4 cores** via `tradebot.slice` |
+| Access | nginx + Let's Encrypt on a domain, IP allowlist, admin login; ufw 22/80/443 |
+| Deploy | Build on the server from git (`deploy.sh`), release dirs + `current` symlink, auto-rollback on failed health check, market-hours guard |
+| Backups | `pg_dump -n mst -n trn` at 15:50 and 23:45 IST + pre-deploy; 14 days local, rclone (crypt) offsite 30 days |
+| F&O universe | Bundled CSV (220 stocks + NIFTY/BANKNIFTY/FINNIFTY weights, re-importable) + daily scrip-master reconciliation |
+| Monitoring | systemd restarts + 1-minute health check with Telegram alerts on change |
+| Updates | Security-only unattended upgrades at 22:30 IST, reboot if needed at 23:30 IST |
+| Time | Asia/Kolkata system time zone, chrony (NPL India + in.pool.ntp.org); database stores UTC |

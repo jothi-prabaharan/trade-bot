@@ -131,7 +131,7 @@ Run the first REAL day with one lot (`max_lots_per_trade = 1`).
 | Suite | Tests | Covers |
 |---|---|---|
 | `TradeBot.Application.Tests` | 293 | Validation + shared vectors, market maths, 130 pattern detectors, brackets, OCO/trailing/paper exchange, news aggregation, schedulers, broker login |
-| `TradeBot.Infrastructure.Tests` | 93 | Migrations on PostgreSQL, every CHECK constraint, form ↔ DB bound parity, encryption, Paytm/Gemini adapters |
+| `TradeBot.Infrastructure.Tests` | 101 | Migrations on PostgreSQL, every CHECK constraint, form ↔ DB bound parity, encryption, Paytm/Gemini adapters |
 | `TradeBot.Api.Tests` | 12 | Real API host on PostgreSQL: auth, validation errors, dashboard socket, and a full PAPER flow (entry → trailing SL → target; stop-loss; re-entry cooldown; dashboard; manual exit; kill switch) |
 
 ```bash

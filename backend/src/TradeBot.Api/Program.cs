@@ -11,11 +11,9 @@ using TradeBot.Application.Engine;
 using TradeBot.Infrastructure;
 using TradeBot.Infrastructure.Persistence;
 
-if (args is ["hash-password", ..])
+if (Cli.IsCommand(args))
 {
-    Console.Write("Password: ");
-    var password = args.Length > 1 ? args[1] : Console.ReadLine() ?? "";
-    Console.WriteLine(BCrypt.Net.BCrypt.HashPassword(password, workFactor: 12));
+    Environment.ExitCode = await Cli.RunAsync(args);
     return;
 }
 
@@ -82,7 +80,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 
-app.MapGet("/health", (Microsoft.Extensions.Hosting.IHostEnvironment env) => Results.Ok(new { status = "ok", env = env.EnvironmentName, utc = DateTime.UtcNow })).AllowAnonymous();
+// Anonymous liveness + engine state for the server health check (nginx exposes it only to allowlisted IPs)
+app.MapGet("/health", (Microsoft.Extensions.Hosting.IHostEnvironment env, IMarketFeed feed, EngineOrchestrator orchestrator) => Results.Ok(new
+{
+    status = "ok", env = env.EnvironmentName, utc = DateTime.UtcNow,
+    engine = new { enabled = engineEnabled, prepared = orchestrator.Prepared, feedConnected = feed.IsConnected, lastTickUtc = feed.LastTickUtc },
+})).AllowAnonymous();
 app.Map("/ws/dashboard", (HttpContext ctx, DashboardService d, ITradingRepository trading, ILogger<DashboardService> log) =>
     DashboardSocket.HandleAsync(ctx, d, trading, log)).RequireAuthorization();
 app.MapControllers();

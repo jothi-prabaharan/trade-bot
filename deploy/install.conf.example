@@ -1,0 +1,29 @@
+# TradeBot server settings. Copy to /etc/tradebot/install.conf (root:root 0600) and edit before running install.sh.
+# Read by install.sh, deploy.sh, tradebotctl, the backup and health-check jobs.
+
+# Public name of the dashboard (DNS A/AAAA record must point at this server before TLS is requested)
+TRADEBOT_DOMAIN=bot.example.com
+# Let's Encrypt account / expiry notices
+TRADEBOT_ACME_EMAIL=you@example.com
+# Only these addresses reach the dashboard and API (space-separated IPs or CIDRs). Edit later with: tradebotctl allow-ip
+TRADEBOT_ALLOW_IPS="203.0.113.10"
+
+# Source repository (SSH needs the deploy key printed by install.sh added to GitHub as a read-only deploy key)
+TRADEBOT_REPO_URL=git@github.com:jothi-prabaharan/trade-bot.git
+TRADEBOT_BRANCH=main
+
+# Resource budget for the whole stack (API + workers + PostgreSQL) on a shared host
+TRADEBOT_CPU_CORES=4
+TRADEBOT_MEMORY_GB=16
+# Put the PostgreSQL 16/main cluster inside the budget (yes for a cluster dedicated to TradeBot)
+TRADEBOT_PG_IN_SLICE=yes
+
+# Backups: pg_dump -n mst -n trn after the close (15:50) and nightly (23:45), kept locally this many days
+TRADEBOT_BACKUP_KEEP_DAYS=14
+# Offsite copy: an rclone remote (ideally a "crypt" remote) configured in /etc/tradebot/rclone.conf, e.g. tradebot-offsite:dumps
+TRADEBOT_RCLONE_REMOTE=
+TRADEBOT_OFFSITE_KEEP_DAYS=30
+
+# Ops alerts from the health check and backup jobs (can be the same bot/chat as the trading alerts)
+TRADEBOT_OPS_TELEGRAM_TOKEN=
+TRADEBOT_OPS_TELEGRAM_CHAT=

@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# TradeBot operations.
+#   tradebotctl status                       services, health, release, backups, allowlist
+#   tradebotctl logs [api|news|auth|nginx|postgres|backup|health] [-f]
+#   tradebotctl deploy [--ref <ref>] [--force]   build and switch to a new release (see deploy.sh)
+#   tradebotctl rollback [--force]           switch back to the previous release
+#   tradebotctl restart [--force]            restart api, news and auth
+#   tradebotctl backup                       pg_dump -n mst -n trn now
+#   tradebotctl restore <file.dump> [--into-production [--force]]
+#   tradebotctl set-admin-password           bcrypt-hash a new dashboard password and restart the API
+#   tradebotctl allow-ip list|add <ip/cidr>|remove <ip/cidr>
+#   tradebotctl seed [--stocks f.csv] [--holidays f.csv]   re-import F&O universe / holidays (defaults: bundled files)
+#   tradebotctl migrate                      apply database migrations with the current release
+#   tradebotctl tls                          request/renew the Let's Encrypt certificate and enable HTTPS
+#   tradebotctl version
+set -euo pipefail
+# shellcheck source=../lib/common.sh
+. "${TRADEBOT_LIB:-/usr/local/lib/tradebot}/common.sh"
+
+cmd=${1:-status}
+shift || true
+require_root
+load_conf
+
+api_cli() { run_as_service /usr/bin/dotnet "$TRADEBOT_CURRENT/api/TradeBot.Api.dll" "$@"; }
+guard() { if [ "${1:-}" != "--force" ] && market_hours; then die "Market hours (09:00–15:35 IST). Add --force to proceed anyway."; fi; }
+set_conf() {  # set_conf KEY VALUE (single-quoted in install.conf)
+  local key=$1 value=$2
+  if grep -q "^$key=" "$TRADEBOT_CONF_FILE"; then sed -i "s|^$key=.*|$key=\"$value\"|" "$TRADEBOT_CONF_FILE"
+  else echo "$key=\"$value\"" >> "$TRADEBOT_CONF_FILE"; fi
+}
+
+case $cmd in
+  status)
+    printf '%-28s %s\n' "Release" "$(cat "$TRADEBOT_CURRENT/REVISION" 2>/dev/null || echo none) ($(readlink -f "$TRADEBOT_CURRENT" 2>/dev/null))"
+    for unit in $TRADEBOT_SERVICES "postgresql@${TRADEBOT_PG_VERSION}-main" nginx tradebot-backup.timer tradebot-healthcheck.timer; do
+      printf '%-28s %s\n' "$unit" "$(systemctl is-active "$unit" 2>/dev/null)"
+    done
+    printf '%-28s %s\n' "Health" "$(curl -fsS --max-time 5 "http://127.0.0.1:$TRADEBOT_API_PORT/health" 2>/dev/null || echo 'not responding')"
+    printf '%-28s %s\n' "Newest backup" "$(find "$TRADEBOT_BACKUPS" -maxdepth 1 -name 'tradebot-*.dump' -printf '%TY-%Tm-%Td %TH:%TM  %f\n' 2>/dev/null | sort | tail -1)"
+    printf '%-28s %s\n' "Allowed IPs" "${TRADEBOT_ALLOW_IPS:-none}"
+    printf '%-28s %s\n' "Slice usage" "$(systemctl show tradebot.slice -p MemoryCurrent --value 2>/dev/null | awk '{ printf "%.1f GB of '"$TRADEBOT_MEMORY_GB"' GB", $1/1073741824 }')"
+    printf '%-28s %s\n' "Market hours now" "$(market_hours && echo yes || echo no)"
+    ;;
+  logs)
+    unit=${1:-api}; shift || true
+    case $unit in
+      api|news|auth) unit="tradebot-$unit" ;;
+      postgres) unit="postgresql@${TRADEBOT_PG_VERSION}-main" ;;
+      backup) unit=tradebot-backup ;;
+      health) unit=tradebot-healthcheck ;;
+    esac
+    exec journalctl -u "$unit" -n 200 --no-pager "$@"
+    ;;
+  deploy)
+    exec "$TRADEBOT_SRC/deploy/deploy.sh" "$@"
+    ;;
+  rollback)
+    guard "${1:-}"
+    current=$(readlink -f "$TRADEBOT_CURRENT")
+    previous=$(find "$TRADEBOT_RELEASES" -mindepth 1 -maxdepth 1 -type d ! -path "$current" -printf '%T@ %p\n' | sort -rn | head -1 | cut -d' ' -f2-)
+    [ -n "$previous" ] || die "No previous release to roll back to."
+    switch_release "$previous"
+    # shellcheck disable=SC2086
+    systemctl restart $TRADEBOT_SERVICES
+    wait_healthy 120 || die "Previous release is not healthy either; check tradebotctl logs api"
+    notify "Rolled back to $(cat "$previous/REVISION")"
+    log "Now on $(cat "$previous/REVISION") ($previous). Database migrations are not reverted."
+    ;;
+  restart)
+    guard "${1:-}"
+    # shellcheck disable=SC2086
+    systemctl restart $TRADEBOT_SERVICES
+    wait_healthy 120 && log "Restarted."
+    ;;
+  backup)
+    exec tradebot-backup manual
+    ;;
+  restore)
+    exec tradebot-restore "$@"
+    ;;
+  set-admin-password)
+    read -r -s -p "New dashboard password (min 10 chars): " pw; echo
+    read -r -s -p "Repeat: " pw2; echo
+    [ "$pw" = "$pw2" ] || die "Passwords differ."
+    # On stdin, so the password never appears in the process list
+    hash=$(printf '%s\n' "$pw" | run_as_service /usr/bin/dotnet "$TRADEBOT_CURRENT/api/TradeBot.Api.dll" hash-password | sed 's/^Password: //' | tail -1)
+    [[ $hash == \$2* ]] || die "Hashing failed: $hash"
+    escaped=$(printf '%s' "$hash" | sed 's/[&|]/\\&/g')
+    sed -i "s|^Auth__AdminPasswordHash=.*|Auth__AdminPasswordHash='$escaped'|" "$TRADEBOT_ENV_FILE"
+    systemctl restart tradebot-api
+    wait_healthy 120 && log "Admin password updated (user: $(sed -n "s/^Auth__AdminUser='\(.*\)'/\1/p" "$TRADEBOT_ENV_FILE"))."
+    ;;
+  allow-ip)
+    action=${1:-list} ip=${2:-}
+    read -ra ips <<< "$TRADEBOT_ALLOW_IPS"
+    case $action in
+      list) [ ${#ips[@]} -eq 0 ] || printf '%s\n' "${ips[@]}"; exit 0 ;;
+      add) valid_cidr "$ip" || die "Not an IP/CIDR: $ip"; TRADEBOT_ALLOW_IPS=$(printf '%s\n' "${ips[@]}" "$ip" | sort -u | xargs) ;;
+      remove) TRADEBOT_ALLOW_IPS=$( { [ ${#ips[@]} -eq 0 ] || printf '%s\n' "${ips[@]}"; } | grep -vxF "$ip" | xargs || true) ;;
+      *) die "allow-ip list|add <ip>|remove <ip>" ;;
+    esac
+    set_conf TRADEBOT_ALLOW_IPS "$TRADEBOT_ALLOW_IPS"
+    write_allowlist /etc/nginx/tradebot-allow.conf
+    nginx -t -q && systemctl reload nginx
+    log "Allowed: ${TRADEBOT_ALLOW_IPS:-nobody}"
+    ;;
+  seed)
+    [ $# -gt 0 ] || set -- --stocks "$TRADEBOT_CURRENT/seed/fno_universe.csv" --holidays "$TRADEBOT_CURRENT/seed/nse_holidays.csv"
+    for arg in "$@"; do [[ $arg == --* ]] || [ -r "$arg" ] || die "Cannot read $arg"; done
+    # Files must be readable by the service user
+    tmp=$(mktemp -d); chmod 0750 "$tmp"; chgrp "$TRADEBOT_USER" "$tmp"
+    args=()
+    for arg in "$@"; do
+      if [[ $arg == --* ]]; then args+=("$arg"); else install -m 0640 -g "$TRADEBOT_USER" "$arg" "$tmp/"; args+=("$tmp/$(basename "$arg")"); fi
+    done
+    api_cli seed "${args[@]}"
+    rm -rf "$tmp"
+    ;;
+  migrate)
+    api_cli migrate
+    ;;
+  tls)
+    certbot certonly --webroot -w /var/www/letsencrypt -d "$TRADEBOT_DOMAIN" -m "$TRADEBOT_ACME_EMAIL" --agree-tos -n --keep-until-expiring \
+      --deploy-hook "systemctl reload nginx"
+    install_nginx_site "$TRADEBOT_CURRENT/deploy"
+    log "HTTPS enabled for https://$TRADEBOT_DOMAIN"
+    ;;
+  version)
+    cat "$TRADEBOT_CURRENT/REVISION"
+    ;;
+  -h|--help|help)
+    sed -n '2,16p' "$0"
+    ;;
+  *)
+    die "Unknown command '$cmd' (tradebotctl help)"
+    ;;
+esac

@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Restores a tradebot-backup dump (mst + trn schemas).
+#   tradebot-restore <file.dump>                     into a new scratch database (drill / inspection)
+#   tradebot-restore <file.dump> --into-production   replaces mst + trn in the live database (services stopped)
+# Encrypted columns (API keys, tokens, TOTP) only decrypt with the same Security__MasterKey that wrote them.
+set -euo pipefail
+# shellcheck source=../lib/common.sh
+. "${TRADEBOT_LIB:-/usr/local/lib/tradebot}/common.sh"
+require_root
+load_conf
+
+file=${1:-}
+mode=${2:-scratch}
+force=${3:-}
+[ -f "$file" ] || die "Usage: tradebot-restore <file.dump> [--into-production [--force]]"
+if [ -f "$file.sha256" ]; then (cd "$(dirname "$file")" && sha256sum --quiet -c "$(basename "$file").sha256") || die "Checksum mismatch: $file"; fi
+pg_restore --list "$file" > /dev/null || die "Not a readable pg_dump archive: $file"
+
+restore_into() {
+  # Owned by the service role so the API can use the restored objects
+  runuser -u postgres -- pg_restore --no-owner --role="$TRADEBOT_USER" --exit-on-error -d "$1" < "$file"
+}
+
+counts() {
+  runuser -u postgres -- psql -X -d "$1" -tAc "SELECT 'accounts=' || (SELECT count(*) FROM mst.trading_accounts) || ' trades=' || (SELECT count(*) FROM trn.daily_trades) || ' orders=' || (SELECT count(*) FROM trn.orders) || ' candles=' || (SELECT count(*) FROM trn.ohlcv_candles)"
+}
+
+if [ "$mode" != "--into-production" ]; then
+  target="${TRADEBOT_DB}_restore_$(date +%Y%m%d%H%M%S)"
+  runuser -u postgres -- createdb -O "$TRADEBOT_USER" "$target"
+  restore_into "$target"
+  log "Restored into scratch database $target: $(counts "$target")"
+  log "Drop it when done: sudo -u postgres dropdb $target"
+  exit 0
+fi
+
+if market_hours && [ "$force" != "--force" ]; then die "Market hours (09:00–15:35 IST). Restore after the close, or add --force."; fi
+warn "This REPLACES schemas mst and trn in database '$TRADEBOT_DB' with $file."
+read -r -p "Type the database name ($TRADEBOT_DB) to continue: " typed
+[ "$typed" = "$TRADEBOT_DB" ] || die "Aborted."
+
+tradebot-backup pre-restore
+# shellcheck disable=SC2086
+systemctl stop $TRADEBOT_SERVICES
+psql_db -c "DROP SCHEMA IF EXISTS trn CASCADE; DROP SCHEMA IF EXISTS mst CASCADE;"
+restore_into "$TRADEBOT_DB"
+# shellcheck disable=SC2086
+systemctl start $TRADEBOT_SERVICES
+log "Production restored from $file: $(counts "$TRADEBOT_DB")"
+notify "Database restored from $(basename "$file")"

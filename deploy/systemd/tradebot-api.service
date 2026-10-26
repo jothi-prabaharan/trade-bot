@@ -1,0 +1,46 @@
+[Unit]
+Description=TradeBot API and trading engine
+Documentation=file:///opt/tradebot/current/docs/PHASE5_DEPLOYMENT.md
+After=network-online.target postgresql@16-main.service
+Wants=network-online.target
+Requires=postgresql@16-main.service
+
+[Service]
+Type=notify
+User=tradebot
+Group=tradebot
+Slice=tradebot.slice
+WorkingDirectory=/opt/tradebot/current/api
+EnvironmentFile=/etc/tradebot/tradebot.env
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5080 ASPNETCORE_ENVIRONMENT=Production DOTNET_PROCESSOR_COUNT=4 DOTNET_GCHeapCount=2 DOTNET_CLI_TELEMETRY_OPTOUT=1
+ExecStart=/usr/bin/dotnet /opt/tradebot/current/api/TradeBot.Api.dll
+Restart=always
+RestartSec=5
+TimeoutStartSec=120
+# The engine squares nothing off on stop; it recovers open brackets from trn.* on the next start
+TimeoutStopSec=30
+MemoryHigh=3G
+MemoryMax=4G
+UMask=0027
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+ReadWritePaths=/var/lib/tradebot
+
+[Install]
+WantedBy=multi-user.target

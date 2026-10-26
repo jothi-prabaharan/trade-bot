@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# pg_dump -n mst -n trn → /var/backups/tradebot: verified, checksummed, pruned locally, copied offsite with rclone.
+# Usage: tradebot-backup [reason]   (reason tags the file name: scheduled, pre-deploy, manual, pre-restore)
+set -euo pipefail
+# shellcheck source=../lib/common.sh
+. "${TRADEBOT_LIB:-/usr/local/lib/tradebot}/common.sh"
+require_root
+load_conf
+
+reason=${1:-scheduled}
+[[ $reason =~ ^[a-z0-9-]+$ ]] || die "Reason must be lowercase letters, digits or '-'."
+stamp=$(TZ=Asia/Kolkata date +%Y%m%d-%H%M%S)
+install -d -m 0700 -o root -g root "$TRADEBOT_BACKUPS"
+file="$TRADEBOT_BACKUPS/tradebot-$stamp-$reason.dump"
+tmp="$file.partial"
+trap 'rm -f "$tmp"; notify "Backup FAILED ($reason). See: journalctl -u tradebot-backup"' ERR
+
+runuser -u postgres -- pg_dump --format=custom --compress=6 --schema=mst --schema=trn --no-owner --no-privileges -d "$TRADEBOT_DB" > "$tmp"
+pg_restore --list "$tmp" > /dev/null   # the archive must be readable before it replaces anything
+mv "$tmp" "$file"
+chmod 0600 "$file"
+(cd "$TRADEBOT_BACKUPS" && sha256sum "$(basename "$file")" > "$(basename "$file").sha256")
+size=$(du -h "$file" | cut -f1)
+
+find "$TRADEBOT_BACKUPS" -maxdepth 1 -name 'tradebot-*.dump*' -mtime +"$TRADEBOT_BACKUP_KEEP_DAYS" -delete
+
+if [ -n "$TRADEBOT_RCLONE_REMOTE" ]; then
+  rc=(rclone --config "$TRADEBOT_ETC/rclone.conf" --retries 3 --low-level-retries 5)
+  "${rc[@]}" copy "$file" "$TRADEBOT_RCLONE_REMOTE/"
+  "${rc[@]}" copy "$file.sha256" "$TRADEBOT_RCLONE_REMOTE/"
+  "${rc[@]}" delete --min-age "${TRADEBOT_OFFSITE_KEEP_DAYS}d" --include 'tradebot-*.dump*' "$TRADEBOT_RCLONE_REMOTE/"
+  log "Offsite copy: $TRADEBOT_RCLONE_REMOTE/$(basename "$file")"
+fi
+log "Backup written: $file ($size)"

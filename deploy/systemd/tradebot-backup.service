@@ -1,0 +1,10 @@
+[Unit]
+Description=TradeBot backup (pg_dump -n mst -n trn, local retention, offsite copy)
+After=postgresql@16-main.service
+
+[Service]
+Type=oneshot
+Slice=tradebot.slice
+ExecStart=/usr/local/sbin/tradebot-backup
+Nice=10
+IOSchedulingClass=idle

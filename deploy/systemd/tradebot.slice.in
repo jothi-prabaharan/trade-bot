@@ -1,0 +1,12 @@
+# Resource budget for the whole TradeBot stack on a shared host (rendered from install.conf).
+[Unit]
+Description=TradeBot resource budget (@@TRADEBOT_CPU_CORES@@ cores, @@TRADEBOT_MEMORY_GB@@ GB)
+Before=slices.target
+
+[Slice]
+CPUAccounting=yes
+CPUQuota=@@CPU_QUOTA@@
+MemoryAccounting=yes
+MemoryHigh=@@MEMORY_HIGH@@
+MemoryMax=@@MEMORY_MAX@@
+TasksMax=4096
