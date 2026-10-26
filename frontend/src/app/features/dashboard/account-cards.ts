@@ -53,11 +53,23 @@ interface CardView { card: AccountCard; profile: AccountDto | undefined; pnl: Ac
               }
             </div>
 
+            <div class="d-flex align-items-baseline flex-wrap gap-2 mb-2" data-testid="account-balance">
+              <div>
+                <div class="tb-label">Account balance</div>
+                <div class="tb-kpi num">{{ v.card.balance | inr }}</div>
+              </div>
+              <span class="num small fw-semibold ms-auto" [class]="pnlClass(v.card.balanceChange)">
+                {{ v.card.balanceChange | inr: 'signed' }} ({{ v.card.balanceChangePct > 0 ? '+' : '' }}{{ v.card.balanceChangePct }}%)
+              </span>
+            </div>
             <div class="row g-2 mb-3">
               <div class="col-6"><div class="tb-label">Opening</div><div class="num">{{ v.card.openingBalance | inr: 'whole' }}</div></div>
               <div class="col-6"><div class="tb-label">Available</div><div class="num">{{ v.card.availableMargin | inr: 'whole' }}</div></div>
               <div class="col-6"><div class="tb-label">Utilised</div><div class="num">{{ v.card.utilisedMargin | inr: 'whole' }}</div></div>
               <div class="col-6"><div class="tb-label">Net today</div><div class="num fw-semibold" [class]="pnlClass(v.pnl?.pnl?.net)">{{ v.pnl?.pnl?.net | inr: 'signed' }}</div></div>
+              @if (v.card.fundsSyncedAtUtc && v.card.mode === 'REAL') {
+                <div class="col-12 small text-body-secondary">Funds from Paytm, synced {{ v.card.fundsSyncedAtUtc | ist }}</div>
+              }
             </div>
 
             @if (v.pnl?.pnl; as p) {

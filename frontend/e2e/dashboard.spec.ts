@@ -40,6 +40,13 @@ test('shows account profiles, funds, consolidated PnL and the trade book', async
   // Realized 3,952.00 − charges 76.84 on Paper Alpha + open MTM (112.40 − 104.25) × 130 − 23.92 on Paper Beta
   await expect(page.getByTestId('net-pnl')).toHaveText('+₹4,910.74');
 
+  // Balance = opening + today's net, per account and in total
+  await expect(card('Paper Alpha').getByTestId('account-balance')).toContainText('₹1,03,875.16');
+  await expect(card('Paper Alpha').getByTestId('account-balance')).toContainText('+₹3,875.16 (+3.88%)');
+  await expect(card('Paper Beta').getByTestId('account-balance')).toContainText('₹1,01,035.58');
+  await expect(card('Real Primary').getByTestId('account-balance')).toContainText('₹1,00,000.00');
+  await expect(page.getByTestId('total-balance')).toHaveText('₹3,04,910.74');
+
   const rows = page.locator('tb-trade-grid tbody tr[data-trade-id]');
   await expect(rows).toHaveCount(2);
   const open = rows.filter({ hasText: 'Paper Beta' });

@@ -9,6 +9,15 @@ import { InrPipe, pnlClass } from '../../shared/format';
   template: `
     <section class="tb-panel p-3 h-100" aria-label="Profit and loss">
       @if (pnl(); as p) {
+        <div class="d-flex flex-wrap align-items-end gap-4 mb-2 pb-2 border-bottom">
+          <div>
+            <div class="tb-label">Total balance ({{ accountCount() }} {{ accountCount() === 1 ? 'account' : 'accounts' }})</div>
+            <div class="tb-kpi num" data-testid="total-balance">{{ totals().balance | inr }}</div>
+          </div>
+          <div><div class="tb-label">Opening</div><div class="num">{{ totals().opening | inr }}</div></div>
+          <div><div class="tb-label">Available margin</div><div class="num">{{ totals().available | inr }}</div></div>
+          <div><div class="tb-label">Utilised</div><div class="num">{{ totals().utilised | inr }}</div></div>
+        </div>
         <div class="d-flex flex-wrap align-items-end gap-4 mb-3">
           <div>
             <div class="tb-label">Net PnL today</div>
@@ -47,5 +56,11 @@ export class PnlPanel {
   protected readonly store = inject(DashboardStore);
   protected readonly pnlClass = pnlClass;
   protected readonly pnl = computed(() => this.store.overview()?.consolidated ?? null);
+  protected readonly accountCount = computed(() => this.store.overview()?.accounts.length ?? 0);
+  protected readonly totals = computed(() => {
+    const cards = this.store.overview()?.accounts ?? [];
+    const sum = (f: (c: (typeof cards)[number]) => number) => Math.round(cards.reduce((t, c) => t + f(c), 0) * 100) / 100;
+    return { balance: sum((c) => c.balance), opening: sum((c) => c.openingBalance), available: sum((c) => c.availableMargin), utilised: sum((c) => c.utilisedMargin) };
+  });
   protected readonly hasCurve = computed(() => this.store.pnlCurve().net.length > 1 || this.store.pnlCurve().realized.length > 0);
 }

@@ -9,7 +9,8 @@ namespace TradeBot.Application.Engine;
 public sealed record AccountCard(
     long AccountId, string AccountName, string ClientId, string UserName, TradeMode Mode, bool IsDataProvider, bool IsActive,
     string TokenStatus, DateTime? TokenExpiryUtc, long? TokenSecondsLeft,
-    decimal OpeningBalance, decimal AvailableMargin, decimal UtilisedMargin, decimal AllocatedCapital, DateTime? FundsSyncedAtUtc);
+    decimal OpeningBalance, decimal AvailableMargin, decimal UtilisedMargin, decimal AllocatedCapital, DateTime? FundsSyncedAtUtc,
+    decimal Balance, decimal BalanceChange, decimal BalanceChangePct);
 
 public sealed record PnlSummary(
     decimal RealizedGross, decimal UnrealizedMtm, decimal Charges, decimal Net, int TotalTrades, int Wins, int Losses, decimal WinRatePct,
@@ -46,6 +47,11 @@ public sealed class DashboardService(ConfigCache config, TokenStore tokens, Trad
         var live = trades.OpenTrades.ToDictionary(t => t.Trade.TradeId);
         var rows = (await trading.TradesAsync(today, null, ct)).Where(t => ids.Contains(t.AccountId)).Select(t => Row(t, live.GetValueOrDefault(t.TradeId)?.Trade)).ToList();
 
+        // MTM from the same rows the grid shows (live LTP for engine-managed trades, else last persisted LTP), net of entry charges
+        var mtm = rows.Where(r => r.Status == TradeStatus.Open).GroupBy(r => r.AccountId).ToDictionary(g => g.Key, g => g.Sum(r => r.NetPnl));
+        var perAccount = accounts.Select(a => new AccountPnl(a.AccountId, a.AccountName, a.TradeMode,
+            Summary(days.GetValueOrDefault(a.AccountId), mtm.GetValueOrDefault(a.AccountId), a.RiskConfig?.MaxDailyLoss ?? 0))).ToList();
+
         var cards = accounts.Select(a =>
         {
             var tok = tokens.Latest(a.AccountId);
@@ -60,16 +66,15 @@ public sealed class DashboardService(ConfigCache config, TokenStore tokens, Trad
                 _ => "PENDING",
             };
             var r = a.RiskConfig;
+            // Balance = opening balance + today's net (realized + MTM − charges), the same figure as the PnL panel
+            var opening = days.GetValueOrDefault(a.AccountId)?.OpeningBalance ?? r?.OpeningBalance ?? 0;
+            var change = perAccount.First(p => p.AccountId == a.AccountId).Pnl.Net;
             return new AccountCard(a.AccountId, a.AccountName, a.ClientId, a.UserName, a.TradeMode, a.IsDataProvider, a.IsActive, status,
                 tok?.TokenExpiry, tok?.TokenExpiry is { } exp ? (long)Math.Max(0, (exp - now).TotalSeconds) : null,
-                days.GetValueOrDefault(a.AccountId)?.OpeningBalance ?? r?.OpeningBalance ?? 0, r?.AvailableMargin ?? 0, r?.UtilisedMargin ?? 0,
-                r?.AllocatedCapital ?? 0, r?.FundsSyncedAt);
+                opening, r?.AvailableMargin ?? 0, r?.UtilisedMargin ?? 0, r?.AllocatedCapital ?? 0, r?.FundsSyncedAt,
+                Math.Round(opening + change, 2), Math.Round(change, 2), opening == 0 ? 0 : Math.Round(change / opening * 100, 2));
         }).ToList();
 
-        // MTM from the same rows the grid shows (live LTP for engine-managed trades, else last persisted LTP), net of entry charges
-        var mtm = rows.Where(r => r.Status == TradeStatus.Open).GroupBy(r => r.AccountId).ToDictionary(g => g.Key, g => g.Sum(r => r.NetPnl));
-        var perAccount = accounts.Select(a => new AccountPnl(a.AccountId, a.AccountName, a.TradeMode,
-            Summary(days.GetValueOrDefault(a.AccountId), mtm.GetValueOrDefault(a.AccountId), a.RiskConfig?.MaxDailyLoss ?? 0))).ToList();
         var consolidated = Combine(perAccount.Select(p => p.Pnl).ToList());
 
         var bot = await trading.GetOrCreateBotStateAsync(today, ct);

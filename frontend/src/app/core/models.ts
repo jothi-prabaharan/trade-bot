@@ -27,6 +27,8 @@ export interface AccountCard {
   accountId: number; accountName: string; clientId: string; userName: string; mode: TradeMode; isDataProvider: boolean; isActive: boolean;
   tokenStatus: TokenStatus; tokenExpiryUtc: string | null; tokenSecondsLeft: number | null;
   openingBalance: number; availableMargin: number; utilisedMargin: number; allocatedCapital: number; fundsSyncedAtUtc: string | null;
+  /** Opening balance + today's net PnL (realized + MTM − charges). */
+  balance: number; balanceChange: number; balanceChangePct: number;
 }
 
 export interface PnlSummary {

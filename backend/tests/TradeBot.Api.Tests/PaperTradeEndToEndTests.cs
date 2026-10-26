@@ -111,6 +111,9 @@ public class PaperTradeEndToEndTests(ApiFactory api)
 
         overview = (await client.GetFromJsonAsync<JsonObject>($"/api/dashboard/overview?scope={accountId}"))!;
         var pnl = overview["perAccount"]![0]!["pnl"]!;
+        var acct = overview["accounts"]![0]!;
+        Assert.Equal(acct["openingBalance"]!.GetValue<decimal>() + pnl["net"]!.GetValue<decimal>(), acct["balance"]!.GetValue<decimal>());
+        Assert.Equal(pnl["net"]!.GetValue<decimal>(), acct["balanceChange"]!.GetValue<decimal>());
         Assert.Equal(3, pnl["totalTrades"]!.GetValue<int>());
         Assert.Equal(closed1.NetPnl + closed2.NetPnl + closed3.NetPnl, pnl["net"]!.GetValue<decimal>());
         Assert.Equal(new[] { "TARGET_HIT", "SL_HIT", "MANUAL_EXIT" },
