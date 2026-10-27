@@ -61,7 +61,7 @@
 | Slippage buffer (REAL LMT) | 0.5%, rounded to tick size |
 | Product | Intraday (`I`) |
 | Session | Entries 09:15–14:45 IST; time square-off 15:15 IST |
-| Auth | 08:45 IST headless Playwright + TOTP, 3 retries, then Telegram alert + manual token paste on dashboard |
+| Auth | 08:45 IST headless Playwright + TOTP, 3 retries for transient errors only (never on an SMS-OTP screen, wrong password or missing credentials), then alert + manual token paste on dashboard |
 | Alerts | Telegram |
 
 ## Phase 2 — Validation

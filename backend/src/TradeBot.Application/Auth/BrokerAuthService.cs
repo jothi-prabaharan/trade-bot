@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using TradeBot.Application.Abstractions;
 using TradeBot.Application.Engine;
+using TradeBot.Application.Security;
 using TradeBot.Domain.Entities.Mst;
 using TradeBot.Domain.Entities.Trn;
 using TradeBot.Domain.Enums;
@@ -20,6 +21,22 @@ public sealed class BrokerAuthService(
     /// <summary>Accounts that need broker tokens: REAL accounts and the market-data provider.</summary>
     public static bool NeedsLogin(TradingAccount a) =>
         a.IsActive && (a.TradeMode == TradeMode.Real || a.IsDataProvider) && a.ApiKey is not null && a.ApiSecret is not null;
+
+    /// <summary>Why headless login cannot run for this account, or null when it has everything it needs.</summary>
+    public static string? MissingForHeadless(TradingAccount a)
+    {
+        var missing = new List<string>();
+        if (string.IsNullOrWhiteSpace(a.LoginId ?? a.Phone ?? a.Email)) missing.Add("login ID (mobile or email)");
+        if (string.IsNullOrEmpty(a.LoginPassword)) missing.Add("login password");
+        if (string.IsNullOrWhiteSpace(a.TotpSecret)) missing.Add("TOTP secret");
+        else
+        {
+            try { if (Totp.Base32Decode(a.TotpSecret).Length < 10) missing.Add("a valid TOTP secret (too short)"); }
+            catch (FormatException) { missing.Add("a valid TOTP secret (not Base32)"); }
+        }
+        return missing.Count == 0 ? null
+            : $"Headless login needs {string.Join(", ", missing)} in the account profile; nothing was sent to Paytm.";
+    }
 
     public async Task LoginAllAsync(CancellationToken ct)
     {
@@ -41,7 +58,8 @@ public sealed class BrokerAuthService(
             tried = attempt;
             try
             {
-                if (account.TotpSecret is null) throw new InvalidOperationException("TOTP secret not configured; headless login impossible.");
+                // Checked before a browser opens: a half-run login can already have made Paytm send an SMS OTP
+                if (MissingForHeadless(account) is { } missing) throw new BrokerLoginException(missing);
                 var requestToken = await browser.GetRequestTokenAsync(account, loginUrl, ct);
                 var t = await paytm.GenerateTokensAsync(account.ApiKey!, account.ApiSecret!, requestToken, ct);
                 await accounts.AddTokenAsync(new AccountAuthToken
@@ -63,7 +81,7 @@ public sealed class BrokerAuthService(
             {
                 lastError = e.Message;
                 log.LogWarning(e, "Login attempt {Attempt}/{Attempts} failed for account {Account}", attempt, attempts, accountId);
-                if (account.TotpSecret is null) break;
+                if (e is BrokerLoginException) break;
                 if (attempt < attempts) await Task.Delay(RetryDelay, clock, ct);
             }
         }

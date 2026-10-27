@@ -130,3 +130,9 @@ public interface IBrokerLoginAutomation
     /// <summary>Drives the broker login page and returns the redirect's request token.</summary>
     Task<string> GetRequestTokenAsync(TradingAccount account, string loginUrl, CancellationToken ct);
 }
+
+/// <summary>
+/// A login failure that retrying cannot fix and would make worse: each new attempt can trigger another SMS OTP,
+/// and repeated wrong passwords can lock the Paytm account.
+/// </summary>
+public sealed class BrokerLoginException(string message) : Exception(message);

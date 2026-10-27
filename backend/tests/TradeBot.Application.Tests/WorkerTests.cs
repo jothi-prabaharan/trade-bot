@@ -38,7 +38,7 @@ internal static class WorkerFixture
         new()
         {
             AccountId = id, AccountName = $"Acct {id}", ClientId = $"C{id}", UserName = "u", TradeMode = mode, IsDataProvider = provider, IsActive = active,
-            ApiKey = keys ? "key" : null, ApiSecret = keys ? "secret" : null, TotpSecret = totp,
+            ApiKey = keys ? "key" : null, ApiSecret = keys ? "secret" : null, TotpSecret = totp, LoginId = "9876543210", LoginPassword = "pw",
         };
 }
 
@@ -503,6 +503,39 @@ public class BrokerAuthServiceTests
         Assert.False(await h.Service.LoginAsync(7, CancellationToken.None));
         Assert.Empty(h.LoggedIn);
         Assert.Equal(1, Assert.Single(h.Tokens).AttemptCount);
+    }
+
+    [Theory]
+    [InlineData(null, "pw", "login ID")]
+    [InlineData("9876543210", null, "login password")]
+    [InlineData("9876543210", "pw", "not Base32", "JBSWY3DP-EHPK3PXP")]
+    public async Task Incomplete_credentials_fail_before_any_browser_or_otp(string? loginId, string? password, string expected, string totp = "JBSWY3DPEHPK3PXP")
+    {
+        var h = new AuthHarness(WorkerFixture.ClockAt(WorkerFixture.Monday, 8, 45));
+        h.Strategy.AuthMaxRetries = 3;
+        var a = WorkerFixture.Account(7, totp: totp);
+        a.LoginId = loginId;
+        a.LoginPassword = password;
+        h.AccountList.Add(a);
+
+        Assert.False(await h.Service.LoginAsync(7, CancellationToken.None));
+        Assert.Empty(h.LoggedIn);
+        Assert.Contains(expected, Assert.Single(h.Tokens).ErrorMessage);
+    }
+
+    [Fact]
+    public async Task Sms_otp_screen_is_not_retried()
+    {
+        var h = new AuthHarness(WorkerFixture.ClockAt(WorkerFixture.Monday, 8, 45));
+        h.Strategy.AuthMaxRetries = 3;
+        h.AccountList.Add(WorkerFixture.Account(7));
+        h.Browser.On(nameof(IBrokerLoginAutomation.GetRequestTokenAsync), _ => Task.FromException<string>(new BrokerLoginException("Paytm asked for the SMS OTP")));
+
+        Assert.False(await h.Service.LoginAsync(7, CancellationToken.None));
+        // One browser run, one OTP at most; the alert carries the reason and the manual link
+        Assert.Single(h.LoggedIn);
+        Assert.Equal(1, Assert.Single(h.Tokens).AttemptCount);
+        Assert.Contains("SMS OTP", (string)Assert.Single(h.Alerts.Calls(nameof(IAlertSender.SendAsync)))[1]!);
     }
 
     [Fact]
