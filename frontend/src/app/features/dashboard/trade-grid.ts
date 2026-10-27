@@ -1,16 +1,16 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
-import { faArrowRightFromBracket, faNewspaper, faShapes } from '@fortawesome/free-solid-svg-icons';
+import { faArrowRightFromBracket, faChartLine, faChevronDown, faNewspaper, faShapes } from '@fortawesome/free-solid-svg-icons';
 import { firstValueFrom } from 'rxjs';
 import { ApiService, apiErrorText } from '../../core/api';
 import { DashboardStore } from '../../core/dashboard-store';
-import { LayoutService, rememberedView } from '../../core/layout';
+import { LayoutService } from '../../core/layout';
 import { MarketBias, TradeRow, TradeStatus } from '../../core/models';
 import { PanelService } from '../../core/panels';
 import { ToastService } from '../../core/ui-state';
 import { InrPipe, IstPipe, PricePipe, pnlClass } from '../../shared/format';
-import { ConfirmService, ViewToggle } from '../../shared/ui';
+import { ConfirmService } from '../../shared/ui';
 
 export const STATUS_BADGE: Record<TradeStatus, { text: string; cls: string }> = {
   OPEN: { text: 'Open', cls: 'text-bg-primary' },
@@ -26,76 +26,66 @@ export const BIAS_BADGE: Record<MarketBias, string> = { BULLISH: 'text-bg-succes
 
 @Component({
   selector: 'tb-trade-grid',
-  imports: [FormsModule, FaIconComponent, InrPipe, IstPipe, PricePipe, ViewToggle],
+  imports: [FormsModule, FaIconComponent, InrPipe, IstPipe, PricePipe],
   template: `
     <section class="tb-panel" aria-label="Today's trades">
       <div class="d-flex align-items-center gap-3 p-3 pb-2 flex-wrap">
         <h2 class="h6 mb-0">Today's trades</h2>
         <span class="badge text-bg-primary">{{ openCount() }} open</span>
         <span class="small text-body-secondary">{{ rows().length }} shown</span>
-        @if (layout.phone()) { <tb-view-toggle class="ms-auto" [(view)]="view" /> }
-        <div class="form-check form-switch mb-0" [class.ms-auto]="!layout.phone()">
+        <div class="form-check form-switch ms-auto mb-0">
           <input class="form-check-input" type="checkbox" id="tb-open-only" [ngModel]="openOnly()" (ngModelChange)="openOnly.set($event)" />
           <label class="form-check-label small" for="tb-open-only">Open only</label>
         </div>
       </div>
       @if (layout.phone()) {
+        <!-- Phones: compact rows; tapping one expands its details (one at a time) -->
         <ul class="tb-list" aria-label="Trades">
           @for (t of rows(); track t.tradeId) {
-            <li class="tb-list-item tb-clickable" [attr.data-trade-id]="t.tradeId" (click)="panels.open('trade', t.tradeId)">
-              @if (view() === 'compact') {
-                <div class="d-flex align-items-center gap-2">
-                  <div class="flex-grow-1 min-w-0">
-                    <div class="fw-semibold text-truncate">{{ t.contract }}</div>
-                    <div class="small text-body-secondary text-truncate">
+            <li class="tb-list-item" [class.tb-expanded]="expanded() === t.tradeId" [attr.data-trade-id]="t.tradeId">
+              <div class="d-flex align-items-center gap-2">
+                <button type="button" class="tb-list-toggle d-flex align-items-center gap-2 flex-grow-1 min-w-0" [attr.aria-expanded]="expanded() === t.tradeId" (click)="toggle(t.tradeId)">
+                  <span class="flex-grow-1 min-w-0">
+                    <span class="d-block fw-semibold text-truncate">{{ t.contract }}</span>
+                    <span class="d-block small text-body-secondary text-truncate">
                       <span class="badge" [class]="status(t.status).cls">{{ status(t.status).text }}</span> {{ t.accountName }} · {{ t.mode }}
-                    </div>
-                  </div>
-                  <div class="text-end">
-                    <div class="num fw-semibold" [class]="pnlClass(t.netPnl)">{{ t.netPnl | inr: 'signed' }}</div>
-                    <div class="small num text-body-secondary">{{ (t.status === 'OPEN' ? t.ltp : t.exitPrice) | price }}</div>
-                  </div>
-                  @if (t.status === 'OPEN') {
-                    <button type="button" class="btn btn-sm btn-outline-danger text-nowrap" (click)="$event.stopPropagation(); exit(t)" [disabled]="exiting().has(t.tradeId)">
-                      <fa-icon [icon]="i.exit" class="me-1" />Exit
-                    </button>
-                  }
-                </div>
-              } @else {
-                <div class="d-flex align-items-start gap-2 mb-2">
-                  <div class="flex-grow-1 min-w-0">
-                    <div class="fw-semibold">{{ t.contract }}</div>
-                    <div class="small text-body-secondary">
-                      {{ t.accountName }} <span class="badge" [class]="t.mode === 'REAL' ? 'text-bg-danger' : 'text-bg-primary'">{{ t.mode }}</span> · {{ t.entryTimeUtc | ist }}
-                    </div>
-                  </div>
-                  <span class="badge" [class]="status(t.status).cls">{{ status(t.status).text }}</span>
-                </div>
-                <div class="row g-2 small mb-2">
-                  <div class="col-4"><div class="tb-label">Qty</div><div class="num">{{ t.quantity }} <span class="text-body-secondary">({{ t.lots }}L)</span></div></div>
-                  <div class="col-4"><div class="tb-label">Entry ₹</div><div class="num">{{ t.entryPrice | price }}</div></div>
-                  <div class="col-4"><div class="tb-label">{{ t.status === 'OPEN' ? 'LTP' : 'Exit' }}</div><div class="num fw-semibold">{{ (t.status === 'OPEN' ? t.ltp : t.exitPrice) | price }}</div></div>
-                  <div class="col-4"><div class="tb-label">SL</div><div class="num text-danger">{{ t.stopLoss | price }}</div></div>
-                  <div class="col-4"><div class="tb-label">Trail SL</div><div class="num" [class.text-warning]="t.trailingSl > t.stopLoss">{{ t.trailingSl | price }}</div></div>
-                  <div class="col-4"><div class="tb-label">Target</div><div class="num text-success">{{ t.target | price }}</div></div>
-                </div>
-                <div class="tb-bracket mb-1" role="progressbar" [attr.aria-valuenow]="t.progressPct" aria-valuemin="0" aria-valuemax="100" aria-label="SL to target">
-                  <div class="tb-fill" [style.width.%]="t.progressPct"></div>
-                </div>
-                <div class="small num text-body-secondary mb-2">{{ t.progressPct }}% from SL to target</div>
-                @if (t.patternName || t.newsSentiment) {
-                  <div class="d-flex flex-wrap gap-1 mb-2">
-                    @if (t.patternName) { <span class="badge text-bg-dark border"><fa-icon [icon]="i.pattern" class="me-1" />{{ t.patternName }}{{ t.patternTimeframe ? ' · ' + t.patternTimeframe : '' }}</span> }
-                    @if (t.newsSentiment) { <span class="badge" [class]="bias(t.newsSentiment)"><fa-icon [icon]="i.news" class="me-1" />{{ t.newsSentiment }}</span> }
-                  </div>
+                    </span>
+                  </span>
+                  <span class="text-end">
+                    <span class="d-block num fw-semibold" [class]="pnlClass(t.netPnl)">{{ t.netPnl | inr: 'signed' }}</span>
+                    <span class="d-block small num text-body-secondary">{{ (t.status === 'OPEN' ? t.ltp : t.exitPrice) | price }}</span>
+                  </span>
+                  <fa-icon [icon]="i.chevron" class="tb-chevron text-body-secondary" />
+                </button>
+                @if (t.status === 'OPEN') {
+                  <button type="button" class="btn btn-sm btn-outline-danger text-nowrap" (click)="exit(t)" [disabled]="exiting().has(t.tradeId)">
+                    <fa-icon [icon]="i.exit" class="me-1" />Exit
+                  </button>
                 }
-                <div class="d-flex align-items-center gap-2">
-                  <div class="num fw-semibold flex-grow-1" [class]="pnlClass(t.netPnl)">{{ t.netPnl | inr: 'signed' }} <span class="small fw-normal">({{ t.netPnlPct }}%)</span></div>
-                  @if (t.status === 'OPEN') {
-                    <button type="button" class="btn btn-sm btn-outline-danger text-nowrap" (click)="$event.stopPropagation(); exit(t)" [disabled]="exiting().has(t.tradeId)">
-                      <fa-icon [icon]="i.exit" class="me-1" />Exit
-                    </button>
+              </div>
+              @if (expanded() === t.tradeId) {
+                <div class="mt-2">
+                  <div class="row g-2 small mb-2">
+                    <div class="col-4"><div class="tb-label">Entry time</div><div class="num">{{ t.entryTimeUtc | ist }}</div></div>
+                    <div class="col-4"><div class="tb-label">Qty</div><div class="num">{{ t.quantity }} <span class="text-body-secondary">({{ t.lots }}L)</span></div></div>
+                    <div class="col-4"><div class="tb-label">Entry ₹</div><div class="num">{{ t.entryPrice | price }}</div></div>
+                    <div class="col-4"><div class="tb-label">SL</div><div class="num text-danger">{{ t.stopLoss | price }}</div></div>
+                    <div class="col-4"><div class="tb-label">Trail SL</div><div class="num" [class.text-warning]="t.trailingSl > t.stopLoss">{{ t.trailingSl | price }}</div></div>
+                    <div class="col-4"><div class="tb-label">Target</div><div class="num text-success">{{ t.target | price }}</div></div>
+                  </div>
+                  <div class="tb-bracket mb-1" role="progressbar" [attr.aria-valuenow]="t.progressPct" aria-valuemin="0" aria-valuemax="100" aria-label="SL to target">
+                    <div class="tb-fill" [style.width.%]="t.progressPct"></div>
+                  </div>
+                  <div class="small num text-body-secondary mb-2">{{ t.progressPct }}% from SL to target · net {{ t.netPnlPct }}%</div>
+                  @if (t.patternName || t.newsSentiment) {
+                    <div class="d-flex flex-wrap gap-1 mb-2">
+                      @if (t.patternName) { <span class="badge text-bg-dark border"><fa-icon [icon]="i.pattern" class="me-1" />{{ t.patternName }}{{ t.patternTimeframe ? ' · ' + t.patternTimeframe : '' }}</span> }
+                      @if (t.newsSentiment) { <span class="badge" [class]="bias(t.newsSentiment)"><fa-icon [icon]="i.news" class="me-1" />{{ t.newsSentiment }}</span> }
+                    </div>
                   }
+                  <button type="button" class="btn btn-sm btn-outline-secondary w-100" (click)="panels.open('trade', t.tradeId)">
+                    <fa-icon [icon]="i.chart" class="me-1" />Charts & orders
+                  </button>
                 </div>
               }
             </li>
@@ -161,11 +151,12 @@ export class TradeGrid {
   protected readonly store = inject(DashboardStore);
   protected readonly panels = inject(PanelService);
   protected readonly layout = inject(LayoutService);
-  protected readonly view = rememberedView('trades');
+  /** Phone list: the one trade whose details are open. */
+  protected readonly expanded = signal<number | null>(null);
   private readonly api = inject(ApiService);
   private readonly confirm = inject(ConfirmService);
   private readonly toasts = inject(ToastService);
-  protected readonly i = { exit: faArrowRightFromBracket, news: faNewspaper, pattern: faShapes };
+  protected readonly i = { exit: faArrowRightFromBracket, news: faNewspaper, pattern: faShapes, chevron: faChevronDown, chart: faChartLine };
   protected readonly pnlClass = pnlClass;
   protected readonly openOnly = signal(false);
   protected readonly exiting = signal(new Set<number>());
@@ -175,6 +166,8 @@ export class TradeGrid {
     return this.openOnly() ? all.filter((t) => t.status === 'OPEN') : all;
   });
   protected readonly openCount = computed(() => this.store.openTrades().length);
+
+  protected toggle(id: number): void { this.expanded.update((open) => (open === id ? null : id)); }
 
   protected status(s: TradeStatus) { return STATUS_BADGE[s]; }
   protected bias(b: MarketBias) { return BIAS_BADGE[b]; }

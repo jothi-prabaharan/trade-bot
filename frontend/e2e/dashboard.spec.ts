@@ -208,23 +208,37 @@ test('notifications: devices from other browsers are listed; removing one asks f
   await page.keyboard.press('Escape');
 });
 
-test('phone: settings move to a menu, lists replace tables, Escape closes only the top dialog', async () => {
+test('phone: settings move to a menu, compact lists expand one row at a time, Escape closes only the top dialog', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
+  // Earlier tests leave toasts up; on a phone they cover the bottom of the screen until dismissed
+  const dismiss = page.getByRole('button', { name: 'Dismiss' });
+  while (await dismiss.count()) await dismiss.first().click({ timeout: 1000 }).catch(() => undefined);
   await expect(page.getByRole('button', { name: 'Strategy settings' })).toBeHidden();
   await expect(page.getByRole('button', { name: 'Kill switch' })).toBeVisible();
   expect((await page.locator('tb-header-bar header').boundingBox())!.height).toBeLessThan(130);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-  // Trades and signals become lists with a compact / detail view
-  const tradesSection = page.locator('section[aria-label="Today\'s trades"]');
-  const beta = page.getByRole('list', { name: 'Trades' }).locator('li', { hasText: 'Paper Beta' });
+  // Trades and signals become compact lists; tapping a row expands it, one at a time
+  const trades = page.getByRole('list', { name: 'Trades' });
+  const beta = trades.locator('li', { hasText: 'Paper Beta' });
+  const alpha = trades.locator('li', { hasText: 'Paper Alpha' });
   await expect(beta.getByRole('button', { name: 'Exit' })).toBeVisible();
-  await tradesSection.getByRole('button', { name: 'Detail' }).click();
-  await expect(beta).toContainText('% from SL to target');
-  await tradesSection.getByRole('button', { name: 'Compact' }).click();
   await expect(beta).not.toContainText('from SL to target');
+  await beta.getByRole('button', { expanded: false }).click();
+  await expect(beta).toContainText('% from SL to target');
+  await alpha.getByRole('button', { expanded: false }).click();
+  await expect(alpha).toContainText('% from SL to target');
+  await expect(beta).not.toContainText('from SL to target');
+  await alpha.getByRole('button', { name: 'Charts & orders' }).click();
+  await expect(drawer('NIFTY 25000 CE')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(drawer('NIFTY 25000 CE')).toBeHidden();
+
   await page.getByRole('tab', { name: /Signals/ }).click();
-  await expect(page.getByRole('list', { name: 'Signals' }).locator('li')).toHaveCount(3);
+  const signals = page.getByRole('list', { name: 'Signals' }).locator('li');
+  await expect(signals).toHaveCount(3);
+  await signals.first().getByRole('button').click();
+  await expect(signals.first()).toContainText('Pattern / News / OI');
 
   // Menu → Market holidays; a confirmation over the drawer takes the first Escape
   await page.getByRole('button', { name: 'Menu' }).click();

@@ -1,15 +1,14 @@
 import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
-import { faArrowsRotate, faMagnifyingGlassChart } from '@fortawesome/free-solid-svg-icons';
+import { faArrowsRotate, faChevronDown, faMagnifyingGlassChart } from '@fortawesome/free-solid-svg-icons';
 import { firstValueFrom } from 'rxjs';
 import { ApiService, apiErrorText } from '../../core/api';
 import { DashboardStore } from '../../core/dashboard-store';
-import { LayoutService, rememberedView } from '../../core/layout';
+import { LayoutService } from '../../core/layout';
 import { ImpactLevel, InstrumentDto, NewsItem, Sentiment, Severity, Signal } from '../../core/models';
 import { ToastService } from '../../core/ui-state';
 import { IstPipe, PricePipe } from '../../shared/format';
-import { ViewToggle } from '../../shared/ui';
 import { BIAS_BADGE } from './trade-grid';
 
 type Tab = 'signals' | 'news' | 'events';
@@ -20,20 +19,19 @@ const SIGNAL_BADGE: Record<string, string> = { NEW: 'text-bg-info', DISPATCHED: 
 
 @Component({
   selector: 'tb-info-tabs',
-  imports: [FormsModule, FaIconComponent, IstPipe, PricePipe, ViewToggle],
+  imports: [FormsModule, FaIconComponent, IstPipe, PricePipe],
   template: `
     <section class="tb-panel" aria-label="Signals, news and events">
       <div class="d-flex align-items-center gap-2 p-2 border-bottom flex-wrap">
         <ul class="nav nav-pills nav-sm" [class.nav-fill]="layout.phone()" [class.w-100]="layout.phone()" role="tablist">
           @for (t of tabs; track t.id) {
             <li class="nav-item" role="presentation">
-              <button type="button" class="nav-link py-1 px-3" role="tab" [class.active]="tab() === t.id" [attr.aria-selected]="tab() === t.id" (click)="tab.set(t.id)">
+              <button type="button" class="nav-link py-1 px-3" role="tab" [class.active]="tab() === t.id" [attr.aria-selected]="tab() === t.id" (click)="selectTab(t.id)">
                 {{ layout.phone() ? t.short : t.label }} <span class="badge text-bg-secondary ms-1">{{ count(t.id) }}</span>
               </button>
             </li>
           }
         </ul>
-        @if (layout.phone()) { <tb-view-toggle [(view)]="view" /> }
         <div class="ms-auto d-flex flex-wrap justify-content-end gap-2 align-items-center">
           @if (tab() === 'news') {
             <label class="visually-hidden" for="tb-scan-target">Scan target</label>
@@ -54,18 +52,19 @@ const SIGNAL_BADGE: Record<string, string> = { NEW: 'text-bg-info', DISPATCHED: 
             @if (layout.phone()) {
               <ul class="tb-list" aria-label="Signals">
                 @for (s of signals(); track s.signalId) {
-                  <li class="tb-list-item">
-                    <div class="d-flex align-items-center gap-2">
-                      <div class="flex-grow-1 min-w-0">
-                        <div class="fw-semibold text-truncate">{{ s.security?.pmlSymbol ?? s.securityId }}</div>
-                        <div class="small text-body-secondary text-truncate">{{ s.createdAt | ist }} · {{ s.detection?.pattern?.patternName ?? '—' }} {{ s.detection?.timeframe }}</div>
-                      </div>
-                      <div class="text-end">
+                  <li class="tb-list-item" [class.tb-expanded]="expanded() === 's' + s.signalId">
+                    <button type="button" class="tb-list-toggle d-flex align-items-center gap-2 w-100" [attr.aria-expanded]="expanded() === 's' + s.signalId" (click)="toggle('s' + s.signalId)">
+                      <span class="flex-grow-1 min-w-0">
+                        <span class="d-block fw-semibold text-truncate">{{ s.security?.pmlSymbol ?? s.securityId }}</span>
+                        <span class="d-block small text-body-secondary text-truncate">{{ s.createdAt | ist }} · {{ s.detection?.pattern?.patternName ?? '—' }} {{ s.detection?.timeframe }}</span>
+                      </span>
+                      <span class="text-end">
                         <span class="badge" [class]="signalBadge(s.status)">{{ s.status }}</span>
-                        <div class="small num text-body-secondary">conf {{ s.combinedAiConfidence }}</div>
-                      </div>
-                    </div>
-                    @if (view() === 'detail') {
+                        <span class="d-block small num text-body-secondary">conf {{ s.combinedAiConfidence }}</span>
+                      </span>
+                      <fa-icon [icon]="i.chevron" class="tb-chevron text-body-secondary" />
+                    </button>
+                    @if (expanded() === 's' + s.signalId) {
                       <div class="row g-2 small mt-1">
                         <div class="col-4"><div class="tb-label">Entry</div><div class="num">{{ s.entryOptionLtp | price }}</div></div>
                         <div class="col-4"><div class="tb-label">SL</div><div class="num text-danger">{{ s.mandatorySlPrice | price }}</div></div>
@@ -109,18 +108,19 @@ const SIGNAL_BADGE: Record<string, string> = { NEW: 'text-bg-info', DISPATCHED: 
             @if (layout.phone()) {
               <ul class="tb-list" aria-label="News">
                 @for (n of news(); track n.newsId) {
-                  <li class="tb-list-item">
-                    <div class="d-flex align-items-start gap-2">
-                      <div class="flex-grow-1 min-w-0">
-                        <div [class.tb-clamp-2]="view() === 'compact'">{{ n.headline }}</div>
-                        <div class="small text-body-secondary">{{ n.company?.nseSymbol ?? (n.instrumentId ? symbol(n.instrumentId) : 'Market') }} · {{ n.analyzedAt | ist }}</div>
-                      </div>
-                      <div class="text-end">
+                  <li class="tb-list-item" [class.tb-expanded]="expanded() === 'n' + n.newsId">
+                    <button type="button" class="tb-list-toggle d-flex align-items-start gap-2 w-100" [attr.aria-expanded]="expanded() === 'n' + n.newsId" (click)="toggle('n' + n.newsId)">
+                      <span class="flex-grow-1 min-w-0">
+                        <span class="d-block" [class.tb-clamp-2]="expanded() !== 'n' + n.newsId">{{ n.headline }}</span>
+                        <span class="d-block small text-body-secondary">{{ n.company?.nseSymbol ?? (n.instrumentId ? symbol(n.instrumentId) : 'Market') }} · {{ n.analyzedAt | ist }}</span>
+                      </span>
+                      <span class="text-end">
                         <span class="badge" [class]="impact(n.impactLevel)">{{ n.impactLevel }}</span>
-                        <div class="small num" [class]="n.sentimentScore > 0 ? 'text-success' : n.sentimentScore < 0 ? 'text-danger' : ''">{{ n.sentimentScore }}</div>
-                      </div>
-                    </div>
-                    @if (view() === 'detail') {
+                        <span class="d-block small num" [class]="n.sentimentScore > 0 ? 'text-success' : n.sentimentScore < 0 ? 'text-danger' : ''">{{ n.sentimentScore }}</span>
+                      </span>
+                      <fa-icon [icon]="i.chevron" class="tb-chevron text-body-secondary" />
+                    </button>
+                    @if (expanded() === 'n' + n.newsId) {
                       @if (n.summary) { <div class="small mt-1">{{ n.summary }}</div> }
                       <div class="small text-body-secondary mt-1">
                         {{ n.newsCategory }} · {{ n.scanType }}
@@ -156,17 +156,18 @@ const SIGNAL_BADGE: Record<string, string> = { NEW: 'text-bg-info', DISPATCHED: 
             @if (layout.phone()) {
               <ul class="tb-list" aria-label="Events">
                 @for (e of store.events(); track e.eventId) {
-                  <li class="tb-list-item">
-                    <div class="d-flex align-items-center gap-2 small">
-                      <span class="badge" [class]="severity(e.severity)">{{ e.severity }}</span>
-                      <span class="fw-semibold text-truncate">{{ e.eventType }}</span>
-                      <span class="ms-auto num text-body-secondary text-nowrap">{{ e.createdAt | ist: view() === 'detail' }}</span>
-                    </div>
-                    @if (view() === 'compact') {
-                      <div class="small text-body-secondary text-truncate">{{ e.message }}</div>
-                    } @else {
-                      @if (e.accountId !== null) { <div class="small text-body-secondary">{{ accountName(e.accountId) }}</div> }
-                      <div class="small">{{ e.message }}</div>
+                  <li class="tb-list-item" [class.tb-expanded]="expanded() === 'e' + e.eventId">
+                    <button type="button" class="tb-list-toggle d-block w-100" [attr.aria-expanded]="expanded() === 'e' + e.eventId" (click)="toggle('e' + e.eventId)">
+                      <span class="d-flex align-items-center gap-2 small">
+                        <span class="badge" [class]="severity(e.severity)">{{ e.severity }}</span>
+                        <span class="fw-semibold text-truncate">{{ e.eventType }}</span>
+                        <span class="ms-auto num text-body-secondary text-nowrap">{{ e.createdAt | ist }}</span>
+                        <fa-icon [icon]="i.chevron" class="tb-chevron text-body-secondary" />
+                      </span>
+                      <span class="d-block small text-body-secondary" [class.text-truncate]="expanded() !== 'e' + e.eventId">{{ e.message }}</span>
+                    </button>
+                    @if (expanded() === 'e' + e.eventId) {
+                      <div class="small text-body-secondary mt-1">{{ e.createdAt | ist: true }}@if (e.accountId !== null) { · {{ accountName(e.accountId) }} }</div>
                     }
                   </li>
                 } @empty { <li class="tb-list-item text-center text-body-secondary py-4">No events.</li> }
@@ -193,10 +194,11 @@ const SIGNAL_BADGE: Record<string, string> = { NEW: 'text-bg-info', DISPATCHED: 
 export class InfoTabs {
   protected readonly store = inject(DashboardStore);
   protected readonly layout = inject(LayoutService);
-  protected readonly view = rememberedView('info');
+  /** Phone lists: the one item whose details are open ('s' signal, 'n' news, 'e' event + id). */
+  protected readonly expanded = signal<string | null>(null);
   private readonly api = inject(ApiService);
   private readonly toasts = inject(ToastService);
-  protected readonly i = { refresh: faArrowsRotate, scan: faMagnifyingGlassChart };
+  protected readonly i = { refresh: faArrowsRotate, scan: faMagnifyingGlassChart, chevron: faChevronDown };
   protected readonly tabs: { id: Tab; label: string; short: string }[] = [
     { id: 'signals', label: 'Signals', short: 'Signals' }, { id: 'news', label: 'News & sentiment', short: 'News' }, { id: 'events', label: 'Events', short: 'Events' },
   ];
@@ -225,6 +227,13 @@ export class InfoTabs {
     const timer = setInterval(() => void this.refresh(), 60000);
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
   }
+
+  protected selectTab(t: Tab): void {
+    this.tab.set(t);
+    this.expanded.set(null);
+  }
+
+  protected toggle(key: string): void { this.expanded.update((open) => (open === key ? null : key)); }
 
   protected count(t: Tab): number {
     return t === 'signals' ? this.signals().length : t === 'news' ? this.news().length : this.store.events().length;

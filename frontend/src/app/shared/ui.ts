@@ -2,22 +2,7 @@ import { Component, ElementRef, Injectable, computed, effect, inject, input, mod
 import { FormsModule } from '@angular/forms';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
 import { faCircleExclamation, faTriangleExclamation, faXmark } from '@fortawesome/free-solid-svg-icons';
-import { ListView } from '../core/layout';
 import { ToastService } from '../core/ui-state';
-
-/** Compact / Detail switch for the phone lists. */
-@Component({
-  selector: 'tb-view-toggle',
-  template: `
-    <div class="btn-group btn-group-sm" role="group" aria-label="List view">
-      <button type="button" class="btn" [class]="view() === 'compact' ? 'btn-secondary' : 'btn-outline-secondary'" [attr.aria-pressed]="view() === 'compact'" (click)="view.set('compact')">Compact</button>
-      <button type="button" class="btn" [class]="view() === 'detail' ? 'btn-secondary' : 'btn-outline-secondary'" [attr.aria-pressed]="view() === 'detail'" (click)="view.set('detail')">Detail</button>
-    </div>
-  `,
-})
-export class ViewToggle {
-  readonly view = model.required<ListView>();
-}
 
 /** Bootstrap offcanvas driven by a signal (no Bootstrap JS). */
 @Component({
@@ -168,7 +153,7 @@ export class ConfirmHost {
         <div class="toast show border-0 tb-toast" [class]="'tb-toast-' + t.tone" role="status">
           <div class="toast-header">
             <strong class="me-auto">{{ t.title }}</strong>
-            <button type="button" class="btn btn-sm p-0 border-0" aria-label="Dismiss" (click)="svc.dismiss(t.id)"><fa-icon [icon]="close" /></button>
+            <button type="button" class="btn btn-sm p-0 border-0 tb-toast-close" aria-label="Dismiss" (click)="svc.dismiss(t.id)"><fa-icon [icon]="close" /></button>
           </div>
           <div class="toast-body">{{ t.body }}</div>
         </div>
