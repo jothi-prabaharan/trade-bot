@@ -87,6 +87,7 @@ PAPER and REAL share this engine. Only the gateway differs:
 | News | `GET news`, `GET news/sentiment`, `GET/PUT news/config`, `POST news/scan` |
 | Validation | `GET validation/rules` (rule catalog + form rules for Angular) |
 | Charts (Phase 4) | `GET candles`, `GET dashboard/pnl-curve`, `GET instruments`, `GET events?afterId=` |
+| Push | `GET push/config` (VAPID public key, created on first use), `GET/POST push/devices` (subscribe or update by endpoint), `PUT push/devices/{id}/kinds`, `DELETE push/devices/{id}`, `POST push/devices/{id}/test` |
 
 Secrets (`[Encrypted]`) are write-only. They are stored as `v1:` AES-GCM ciphertext and never serialized; responses expose `hasApiKey`-style flags instead.
 
@@ -109,13 +110,18 @@ Secrets (`[Encrypted]`) are write-only. They are stored as `v1:` AES-GCM ciphert
 | `PaytmMoney:*` | API, Auth | `OrderSource`, `SecurityMasterFile`, `StrikeDivisor`, `MaxSubscriptionsPerConnection`, `PriceChartIntervals` |
 | `BrokerLogin:*` | Auth | `ChromiumExecutablePath`, `Headless`, timeouts, data-driven `Steps`, failure screenshots |
 
+| `WebPush:Subject` | all | VAPID contact (`mailto:` or `https:`); defaults to the dashboard origin `Cors:Origins:0` |
+
 Business settings live in `mst.*` (edited from the dashboard), not in appsettings.
+
+**Alert delivery.** `IAlertSender` is an `AlertDispatcher` in every host: callers return at once, and each channel (Telegram, Web Push) drains its own queue in the background, 20 s per attempt. A slow channel never delays trading (e.g. the exit after a rejected stop-loss) or the other channel; queued alerts are delivered on shutdown. Web Push removes subscriptions the push service reports gone (404/410) and records other failures on the device.
 
 ## 10. Schema changes in Phase 3
 | Migration | SQL script | Change |
 |---|---|---|
 | `Phase3TradePacingAndWatchlist` | `db/migrations/0003_phase3_trade_pacing_watchlist.sql` | trade pacing + SL-L settings, `trn.daily_watchlist` |
 | `Phase3NewsPeriodicScan` | `db/migrations/0004_phase3_news_periodic_scan.sql` | `scan_type` adds `PERIODIC` |
+| `WebPushNotifications` (later) | `db/migrations/0005_web_push_notifications.sql` | `mst.web_push_keys` (single-row VAPID pair, private key encrypted), `mst.web_push_subscriptions` (endpoint, keys with `auth` encrypted, alert kinds, delivery status) |
 
 ## 11. Broker details to verify on first live login
 The Paytm Money routes come from the official pyPMClient SDK. These details could not be confirmed, so they are configurable or parsed tolerantly:

@@ -1,6 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 
-export type PanelKind = 'trade' | 'account' | 'risk' | 'strategy' | 'gemini' | 'patterns' | 'holidays' | 'token';
+export type PanelKind = 'trade' | 'account' | 'risk' | 'strategy' | 'gemini' | 'patterns' | 'holidays' | 'token' | 'notifications';
 
 /** One drawer at a time over the dashboard; `id` is the trade or account it targets (none = create). */
 @Injectable({ providedIn: 'root' })

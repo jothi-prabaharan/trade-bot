@@ -3,7 +3,8 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   AccountDto, ApiError, Candle, ChartPattern, DashboardOverview, GeminiConfigResponse, InstrumentDto, LoginResponse, MarketHoliday,
-  NewsItem, PatternRow, PnlCurve, RiskConfig, Scope, Sentiment, Signal, StrategyConfig, SystemEvent, TradeDetail,
+  NewsItem, PatternRow, PnlCurve, PushAlertKinds, PushDeliveryResult, PushDevice, RiskConfig, Scope, Sentiment, Signal, StrategyConfig,
+  SystemEvent, TradeDetail,
 } from './models';
 import { ValidationRulesDocument } from './validation/rules';
 
@@ -58,6 +59,15 @@ export class ApiService {
   createHoliday(body: Body): Observable<MarketHoliday> { return this.http.post<MarketHoliday>('/api/market-holidays', body); }
   updateHoliday(id: number, body: Body): Observable<MarketHoliday> { return this.http.put<MarketHoliday>(`/api/market-holidays/${id}`, body); }
   deleteHoliday(id: number): Observable<void> { return this.http.delete<void>(`/api/market-holidays/${id}`); }
+
+  pushConfig(): Observable<{ publicKey: string }> { return this.http.get<{ publicKey: string }>('/api/push/config'); }
+  pushDevices(): Observable<PushDevice[]> { return this.http.get<PushDevice[]>('/api/push/devices'); }
+  subscribePush(body: { endpoint: string; p256dh: string; auth: string; deviceLabel: string; kinds: PushAlertKinds }): Observable<PushDevice> {
+    return this.http.post<PushDevice>('/api/push/devices', body);
+  }
+  updatePushKinds(id: number, kinds: PushAlertKinds): Observable<PushDevice> { return this.http.put<PushDevice>(`/api/push/devices/${id}/kinds`, kinds); }
+  removePushDevice(id: number): Observable<void> { return this.http.delete<void>(`/api/push/devices/${id}`); }
+  testPush(id: number): Observable<PushDeliveryResult> { return this.http.post<PushDeliveryResult>(`/api/push/devices/${id}/test`, {}); }
 
   trade(id: number): Observable<TradeDetail> { return this.http.get<TradeDetail>(`/api/trades/${id}`); }
   exitTrade(id: number): Observable<void> { return this.http.post<void>(`/api/trades/${id}/exit`, {}); }

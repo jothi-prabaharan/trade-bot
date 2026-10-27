@@ -2,7 +2,7 @@ import { Component, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
 import {
-  faBell, faBellSlash, faCalendarDays, faChartLine, faCircle, faGear, faMoon, faNewspaper, faPowerOff, faPuzzlePiece, faRightFromBracket, faSun, faUserPlus,
+  faBell, faBellSlash, faCalendarDays, faCircle, faDownload, faMobileScreenButton, faGear, faMoon, faNewspaper, faPowerOff, faPuzzlePiece, faRightFromBracket, faSun, faUserPlus,
 } from '@fortawesome/free-solid-svg-icons';
 import { firstValueFrom } from 'rxjs';
 import { ApiService, apiErrorText } from '../../core/api';
@@ -10,6 +10,7 @@ import { AuthService } from '../../core/auth';
 import { DashboardStore } from '../../core/dashboard-store';
 import { Scope } from '../../core/models';
 import { PanelKind, PanelService } from '../../core/panels';
+import { PwaService } from '../../core/pwa';
 import { ThemeService, ToastService } from '../../core/ui-state';
 import { IstPipe } from '../../shared/format';
 import { ConfirmService } from '../../shared/ui';
@@ -27,7 +28,7 @@ const SESSION_LABEL: Record<string, { text: string; cls: string }> = {
   imports: [FormsModule, FaIconComponent, IstPipe],
   template: `
     <header class="navbar navbar-expand border-bottom px-3 py-2 gap-2 flex-wrap sticky-top bg-body">
-      <span class="navbar-brand fw-semibold me-2"><fa-icon [icon]="i.logo" class="text-success me-2" />TradeBot</span>
+      <span class="navbar-brand fw-semibold me-2 d-flex align-items-center"><img src="favicon.svg" alt="" width="28" height="28" class="me-2" />TradeBot</span>
 
       @if (bot(); as b) {
         <span class="badge" [class]="session().cls">{{ session().text }}</span>
@@ -60,6 +61,11 @@ const SESSION_LABEL: Record<string, { text: string; cls: string }> = {
         <button type="button" class="btn btn-sm btn-outline-secondary" [title]="toasts.muted() ? 'Unmute alerts' : 'Mute alerts'" (click)="toasts.toggleMute()">
           <fa-icon [icon]="toasts.muted() ? i.muted : i.bell" />
         </button>
+        @if (pwa.canInstall()) {
+          <button type="button" class="btn btn-sm btn-outline-success" title="Install TradeBot as an app" (click)="pwa.install()">
+            <fa-icon [icon]="i.install" /><span class="d-none d-md-inline ms-1">Install app</span>
+          </button>
+        }
         <button type="button" class="btn btn-sm btn-outline-secondary" [title]="theme.theme() === 'dark' ? 'Light theme' : 'Dark theme'" (click)="theme.toggle()">
           <fa-icon [icon]="theme.theme() === 'dark' ? i.sun : i.moon" />
         </button>
@@ -77,11 +83,12 @@ export class HeaderBar {
   protected readonly theme = inject(ThemeService);
   protected readonly toasts = inject(ToastService);
   protected readonly auth = inject(AuthService);
+  protected readonly pwa = inject(PwaService);
   private readonly api = inject(ApiService);
   private readonly confirm = inject(ConfirmService);
 
   protected readonly i = {
-    logo: faChartLine, dot: faCircle, bell: faBell, muted: faBellSlash, sun: faSun, moon: faMoon, kill: faPowerOff, logout: faRightFromBracket,
+    dot: faCircle, install: faDownload, bell: faBell, muted: faBellSlash, sun: faSun, moon: faMoon, kill: faPowerOff, logout: faRightFromBracket,
   };
   protected readonly configButtons: { kind: PanelKind; label: string; icon: typeof faGear }[] = [
     { kind: 'account', label: 'Add account', icon: faUserPlus },
@@ -89,6 +96,7 @@ export class HeaderBar {
     { kind: 'gemini', label: 'News intelligence settings', icon: faNewspaper },
     { kind: 'patterns', label: 'Chart patterns', icon: faPuzzlePiece },
     { kind: 'holidays', label: 'Market holidays', icon: faCalendarDays },
+    { kind: 'notifications', label: 'Notifications', icon: faMobileScreenButton },
   ];
 
   protected readonly bot = computed(() => this.store.overview()?.bot ?? null);

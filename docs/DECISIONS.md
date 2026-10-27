@@ -87,6 +87,10 @@
 | Confirmations | Manual exit: confirm dialog. Kill switch: type `KILL` + reason. PAPER→REAL: type the client ID. REAL→PAPER: confirm dialog |
 | Alerts | Toasts for trade, rejection and login events; sound on critical events; mute toggle |
 | Tests | Vitest (unit + all shared validation vectors) and Playwright e2e against the real API with a PAPER account |
+| App icon | Bot head with a rising chart (green on the dashboard's dark background), used for the tab, installed app and header |
+| PWA | Installable; service worker caches the app shell only (never API data); a new deploy shows a *Reload* prompt instead of applying silently |
+| Push notifications | Web Push alongside Telegram. Per device: Critical (default on), trade entries, trade exits, daily. VAPID keys in `mst.web_push_keys`, created on first use |
+| Alert delivery | Queued per channel; never awaited on the trading path |
 | Sign-in | Shared by every open tab until the last one closes (8 h token). **Remember me**, unticked by default, keeps it for **30 days** across browser restarts; `tradebotctl sign-out-all` revokes every session |
 
 ## Phase 5 — Deployment

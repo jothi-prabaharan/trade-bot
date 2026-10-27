@@ -33,6 +33,7 @@ body { font-size: 0.875rem; }
 // Bottom-left keeps toasts clear of drawer footers (drawers open on the right)
 .tb-toasts { z-index: 1090; pointer-events: none; }
 .tb-toast { min-width: 280px; pointer-events: auto; }
+.tb-update { z-index: 1095; max-width: calc(100vw - 2rem); }
 .tb-toast-success { border-left: 4px solid var(--tb-profit) !important; }
 .tb-toast-info { border-left: 4px solid var(--bs-info) !important; }
 .tb-toast-warning { border-left: 4px solid var(--bs-warning) !important; }

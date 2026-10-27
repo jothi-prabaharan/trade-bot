@@ -1,3 +1,4 @@
+using Lib.Net.Http.WebPush;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -7,6 +8,7 @@ using TradeBot.Application.Abstractions;
 using TradeBot.Infrastructure.External;
 using TradeBot.Infrastructure.External.Gemini;
 using TradeBot.Infrastructure.External.Paytm;
+using TradeBot.Infrastructure.External.WebPush;
 using TradeBot.Infrastructure.Persistence;
 using TradeBot.Infrastructure.Seeding;
 using TradeBot.Infrastructure.Repositories;
@@ -60,8 +62,21 @@ public static class DependencyInjection
         services.AddSingleton<IPaytmMoneyClient>(sp => new PaytmMoneyClient(Http(TimeSpan.FromSeconds(30)),
             sp.GetRequiredService<IOptions<PaytmMoneyOptions>>(), sp.GetRequiredService<ILogger<PaytmMoneyClient>>()));
         services.AddSingleton<INewsIntelligenceClient>(sp => new GeminiNewsClient(Http(TimeSpan.FromSeconds(180)), sp.GetRequiredService<ILogger<GeminiNewsClient>>()));
-        services.AddSingleton<IAlertSender>(sp => new TelegramAlertSender(Http(TimeSpan.FromSeconds(15)),
-            sp.GetRequiredService<IDbContextFactory<TradeBotDbContext>>(), sp.GetRequiredService<ILogger<TelegramAlertSender>>()));
+        var pushSubject = WebPushService.ResolveSubject(config);
+        services.AddSingleton<IWebPushService>(sp => new WebPushService(
+            new PushServiceClient(Http(TimeSpan.FromSeconds(15))) { AutoRetryAfter = true, MaxRetriesAfter = 1 },
+            sp.GetRequiredService<IDbContextFactory<TradeBotDbContext>>(), sp.GetRequiredService<TimeProvider>(), pushSubject,
+            sp.GetRequiredService<ILogger<WebPushService>>()));
+        // Alerts are queued and fanned out to Telegram and Web Push in the background (see AlertDispatcher)
+        services.AddSingleton(sp => new AlertDispatcher(
+            [
+                new TelegramAlertSender(Http(TimeSpan.FromSeconds(15)), sp.GetRequiredService<IDbContextFactory<TradeBotDbContext>>(),
+                    sp.GetRequiredService<ILogger<TelegramAlertSender>>()),
+                new WebPushAlertSender(sp.GetRequiredService<IWebPushService>()),
+            ],
+            sp.GetRequiredService<ILogger<AlertDispatcher>>()));
+        services.AddSingleton<IAlertSender>(sp => sp.GetRequiredService<AlertDispatcher>());
+        services.AddHostedService(sp => sp.GetRequiredService<AlertDispatcher>());
         services.AddSingleton<IMarketFeed, PaytmMarketFeed>();
         services.AddSingleton<IScripMasterSync, ScripMasterSync>();
         services.AddSingleton<IBrokerLoginAutomation, PlaywrightBrokerLogin>();

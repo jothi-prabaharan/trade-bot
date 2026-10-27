@@ -3,6 +3,7 @@ import { DashboardStore } from '../../core/dashboard-store';
 import { RulesService } from '../../core/validation/forms';
 import { AccountDrawer } from '../config/account-drawer';
 import { HolidaysDrawer, PatternsDrawer } from '../config/catalog-drawers';
+import { NotificationsDrawer } from '../config/notifications-drawer';
 import { RiskDrawer } from '../config/risk-drawer';
 import { GeminiDrawer, StrategyDrawer, TokenDrawer } from '../config/settings-drawers';
 import { AccountCards } from './account-cards';
@@ -17,7 +18,7 @@ import { TradeGrid } from './trade-grid';
   selector: 'tb-dashboard',
   imports: [
     HeaderBar, AccountCards, PnlPanel, TradeGrid, InfoTabs, TradeDetailDrawer,
-    AccountDrawer, RiskDrawer, StrategyDrawer, GeminiDrawer, PatternsDrawer, HolidaysDrawer, TokenDrawer,
+    AccountDrawer, RiskDrawer, StrategyDrawer, GeminiDrawer, PatternsDrawer, HolidaysDrawer, TokenDrawer, NotificationsDrawer,
   ],
   template: `
     <tb-header-bar />
@@ -40,6 +41,7 @@ import { TradeGrid } from './trade-grid';
     <tb-patterns-drawer />
     <tb-holidays-drawer />
     <tb-token-drawer />
+    <tb-notifications-drawer />
   `,
 })
 export class Dashboard {

@@ -2,16 +2,19 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
+using Lib.Net.Http.WebPush;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using TradeBot.Api.Hosting;
 using TradeBot.Application.Abstractions;
 using TradeBot.Application.Engine;
 using TradeBot.Infrastructure;
+using TradeBot.Infrastructure.External.WebPush;
 using TradeBot.Infrastructure.Persistence;
 using TradeBot.Infrastructure.Security;
 
@@ -44,6 +47,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(Ist.ToUtc(TradingDay, new TimeOnly(10, 0)), TimeSpan.Zero));
     public RecordingAlerts Alerts { get; } = new();
+    public FakePushService Push { get; } = new();
 
     public ApiFactory()
     {
@@ -62,6 +66,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         {
             s.AddSingleton<TimeProvider>(Clock);
             s.AddSingleton<IAlertSender>(Alerts);
+            s.AddSingleton<IWebPushService>(sp => new WebPushService(new PushServiceClient(new HttpClient(Push)),
+                sp.GetRequiredService<IDbContextFactory<TradeBotDbContext>>(), TimeProvider.System, "mailto:ops@example.com",
+                sp.GetRequiredService<ILogger<WebPushService>>()));
             s.AddSingleton(sp => new JwtIssuer(sp.GetRequiredService<AuthOptions>(), TimeProvider.System));
         });
     }

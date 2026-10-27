@@ -1252,6 +1252,130 @@ namespace TradeBot.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("TradeBot.Domain.Entities.Mst.WebPushKeys", b =>
+                {
+                    b.Property<int>("WebPushKeysId")
+                        .HasColumnType("integer")
+                        .HasColumnName("web_push_keys_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("PrivateKey")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("private_key");
+
+                    b.Property<string>("PublicKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("public_key");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.HasKey("WebPushKeysId")
+                        .HasName("pk_web_push_keys");
+
+                    b.ToTable("web_push_keys", "mst", t =>
+                        {
+                            t.HasCheckConstraint("ck_web_push_keys_single_row", "web_push_keys_id = 1");
+                        });
+                });
+
+            modelBuilder.Entity("TradeBot.Domain.Entities.Mst.WebPushSubscription", b =>
+                {
+                    b.Property<long>("WebPushSubscriptionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("web_push_subscription_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("WebPushSubscriptionId"));
+
+                    b.Property<string>("Auth")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("auth");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("DeviceLabel")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("device_label");
+
+                    b.Property<string>("Endpoint")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("endpoint");
+
+                    b.Property<int>("FailureCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("failure_count");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTime?>("LastSuccessAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_success_at");
+
+                    b.Property<bool>("NotifyOnCritical")
+                        .HasColumnType("boolean")
+                        .HasColumnName("notify_on_critical");
+
+                    b.Property<bool>("NotifyOnEntry")
+                        .HasColumnType("boolean")
+                        .HasColumnName("notify_on_entry");
+
+                    b.Property<bool>("NotifyOnExit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("notify_on_exit");
+
+                    b.Property<bool>("NotifyOnInfo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("notify_on_info");
+
+                    b.Property<string>("P256dh")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("p256dh");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.HasKey("WebPushSubscriptionId")
+                        .HasName("pk_web_push_subscriptions");
+
+                    b.HasIndex("Endpoint")
+                        .IsUnique()
+                        .HasDatabaseName("ix_web_push_subscriptions_endpoint");
+
+                    b.ToTable("web_push_subscriptions", "mst", t =>
+                        {
+                            t.HasCheckConstraint("ck_web_push_subscriptions_https", "endpoint LIKE 'https://%'");
+                        });
+                });
+
             modelBuilder.Entity("TradeBot.Domain.Entities.Trn.CompanyDailyNews", b =>
                 {
                     b.Property<long>("NewsId")

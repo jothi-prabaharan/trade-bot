@@ -129,6 +129,13 @@ export interface TradeDetail {
   orders: Order[];
 }
 
+export interface PushAlertKinds { entry: boolean; exit: boolean; critical: boolean; info: boolean }
+export interface PushDevice {
+  id: number; endpoint: string; deviceLabel: string; kinds: PushAlertKinds; createdAt: string; lastSuccessAt: string | null;
+  failureCount: number; lastError: string | null;
+}
+export interface PushDeliveryResult { sent: number; failed: number; removed: number }
+
 export interface Candle { time: string; open: number; high: number; low: number; close: number; volume: number }
 export interface CurvePoint { timeUtc: string; value: number }
 export interface PnlCurve { realized: CurvePoint[]; net: CurvePoint[] }

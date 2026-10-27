@@ -17,6 +17,8 @@ export class ThemeService {
   constructor() {
     effect(() => {
       this.html.setAttribute('data-bs-theme', this.theme());
+      // Browser and installed-app title bar follow the colour mode
+      this.html.ownerDocument.querySelector('meta[name="theme-color"]')?.setAttribute('content', this.theme() === 'dark' ? '#0d1117' : '#ffffff');
       save('tradebot.theme', this.theme());
     });
   }

@@ -125,6 +125,8 @@ The host-wide changes are small: `vm.swappiness=10` and `somaxconn`. No overcomm
 - **Content Security Policy:** `script-src 'self'` with no inline scripts (the Angular build disables critical-CSS inlining for this), `connect-src 'self' wss://<domain>`, `frame-ancestors 'none'`.
 - **Rate limits:** nginx allows 10 login attempts a minute (burst 5) and 20 API requests a second (burst 40), both returning 429. These sit on top of the API's own limits.
 - **Logs:** the WebSocket location is not access-logged, because its JWT travels in the query string.
+- **Caching:** only content-hashed bundles (`main-XXXXXXXX.js`, `chunk-…`, `styles-…`) are `immutable` for a year. Icons, the manifest (`application/manifest+json`), `ngsw-worker.js` and `ngsw.json` revalidate on every request, so a deploy reaches installed apps; `/api/` and `/ws/` are `^~` prefixes so the static rules never capture them.
+- **Web Push:** the API, News and Auth services send directly to the browsers' push services (Google FCM, Mozilla, Apple) over outbound HTTPS; nothing inbound is needed. Optionally set `WebPush__Subject='mailto:you@example.com'` in `tradebot.env` (default: the dashboard URL).
 - **Secrets:**
   - `tradebot.env` is root:tradebot 0640. The master key encrypts credentials in the database.
   - Passwords are bcrypt-hashed via stdin, so they never appear in the process list.
@@ -180,10 +182,11 @@ Trading alerts (entries, exits, kill switch, login failures) come from the appli
 | PostgreSQL 16 restarted with the rendered 16 GB / 4-core tuning | `shared_buffers` 4 GB, `effective_cache_size` 10 GB, `work_mem` 32 MB, `jit` off |
 | nginx 1.24 with the rendered site (self-signed stand-in certificate) | `nginx -t` passes. Verified: HTTP→HTTPS redirect, HTTP/2, headers, immutable assets, SPA fallback, 401 without token, 403 for non-allowlisted IPs while ACME stays reachable, 429 rate limiting, invalid allowlist entries rejected |
 | Production Angular build through nginx in Chromium | **0 CSP violations, 0 console errors**: login, live `wss://` socket, charts and drawers working |
+| PWA through nginx in Chromium (persistent profile) | Manifest and installability: no errors, *Install app* offered; service worker controls the page; API responses live (not cached); offline reload opens the shell; a release swapped under an open dashboard shows *new version · Reload* and loads it only on Reload; the server's push payload shows as a notification with icon, badge and require-interaction. A real browser subscription needs Google's push service, which the validation sandbox blocks; the drawer then reports it after 30 s. |
 | Backup → scratch restore → `migrate` | identical row counts; migration history intact; tampered dump rejected by checksum |
 | `migrate` / `seed` CLI on an empty database, twice | 4 migrations, 3 indices + 220 stocks + 130 patterns + 15 holidays + 2 charge rates; second run changes nothing |
 | Release publish | API and news 11 MB each (no Playwright driver); auth carries the Linux driver |
-| Test suites | backend 293 + 101 + 12, Vitest 107, Playwright 12, all passing |
+| Test suites | backend 293 + 108 + 17, Vitest 116, Playwright 15, all passing |
 
 Bugs found and fixed during validation:
 - `http2 on;` needs nginx 1.25.1+, so the 1.24 `listen … http2` form is used.
@@ -192,3 +195,4 @@ Bugs found and fixed during validation:
 - Angular's critical-CSS inline script would have been blocked by the CSP.
 - A strict-overcommit sysctl was wrong for a shared host and was removed.
 - The allowlist no longer includes an implicit localhost entry.
+- The old static rule cached every `.js`/`.png` for a year, which would have pinned an unhashed service worker; only hashed files are immutable now. nginx also needs the `{8}` regex quoted.

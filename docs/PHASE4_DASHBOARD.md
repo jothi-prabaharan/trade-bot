@@ -68,11 +68,23 @@ One page; every editor opens as an offcanvas drawer over it, so the trade book s
 
 - **Which events become toasts:** trade opened/closed, entry rejected or unfilled, kill switch, profit lock, login success/failure, mode change, EXTREME news, and any `CRITICAL` event. Signal rejections stay in the events tab.
 - **Placement and sound:** toasts appear bottom-left, clear of drawer buttons. Critical events also beep (WebAudio, nothing to download); the mute toggle is remembered.
-- **Theme and session:** the theme (dark default, light toggle) and scope are kept in `localStorage`. The admin JWT is kept in `sessionStorage`, so closing the tab signs out, and any 401 returns to the login page.
+- **Theme and session:** the theme (dark default, light toggle) and scope are kept in `localStorage`. Sign-in is shared by every tab (see *Sign-in* above), and any 401 returns every tab to the login page.
 
 ![Mobile, light theme](images/mobile-light.png)
 
-## 6. Backend additions for the dashboard
+## 6. Installable app (PWA) and notifications
+| Piece | Path / behaviour |
+|---|---|
+| Icon (bot with a rising chart) | Source artwork in `scripts/icons.mjs`; `npm run icons` renders `favicon.svg`, `favicon.ico` (16/32/48), `icons/icon-192/512.png`, `icons/maskable-512.png` (Android safe zone), `icons/apple-touch-icon.png`, `icons/badge-96.png` (status-bar badge). The header and login page use the same SVG. |
+| Manifest | `public/manifest.webmanifest`: standalone window, dark theme colour (the title bar follows the light/dark toggle) |
+| Service worker | `@angular/service-worker`, production builds only (`ngsw-config.json`). It caches the **app shell only**: there are no data groups, so `/api`, `/ws` and `/health` always go to the server and trading data is never served stale. Offline, the shell still opens and shows the link as down. |
+| Updates | An open dashboard checks for a new deploy every 15 min and whenever its tab becomes visible. It shows *A new version of TradeBot is ready · Reload* and never swaps code mid-session on its own. |
+| Install | **Install app** appears in the header when the browser offers it (Chrome/Edge on desktop and Android). On iPhone/iPad: Share → *Add to Home Screen*. |
+| Notifications drawer (phone icon in the header) | Turns Web Push on for this browser or installed app, with a choice per device of *Critical* (default), *Trade entries*, *Trade exits* and *Daily*. Lists every device with its last delivery and failures; **Test** sends a sample and **Remove** forgets a device. Tapping a notification focuses or opens the dashboard. On iOS, push works only from the home-screen app (16.4+). |
+
+![Update prompt](images/pwa-update.png)
+
+## 7. Backend additions for the dashboard
 | Endpoint / change | Purpose |
 |---|---|
 | `GET /api/candles?instrumentId&securityId&timeframe&date&days` | Persisted bars merged with in-memory history and the forming bar |
@@ -83,17 +95,20 @@ One page; every editor opens as an offcanvas drawer over it, so the trade book s
 | Overview MTM from the grid rows | Card, panel and grid always agree (net of entry charges) |
 | API-only host (`Engine:Enabled=false`) loads the config cache at startup | The dashboard works without the engine (e2e, read-only replicas) |
 | Daily PnL / bot-state rows created with `INSERT … ON CONFLICT DO NOTHING` | No error-level log noise when concurrent first requests of the day race |
+| `GET push/config`, `GET/POST push/devices`, `PUT push/devices/{id}/kinds`, `DELETE push/devices/{id}`, `POST push/devices/{id}/test` | Web Push devices (see Phase 3 §7) |
 
-## 7. Tests
+## 8. Tests
 | Suite | Count | What it covers |
 |---|---|---|
-| Vitest (`npm test`) | 107 | All 104 shared vectors (7 forms + bracket rules), catalog coverage, decimal/time helpers |
-| Playwright (`npm run e2e`) | 12 | Real API + PostgreSQL. Login (wrong and right password); accounts, funds, PnL and trade book from seeded data; trade drawer charts and legs; manual-exit confirmation; risk drawer rules (field + `CX_*`) then save; new account with field errors; typed confirmation for REAL with the server's refusal shown; socket event → toast; strategy and holiday cross-field rules; remembered theme; global kill switch with `KILL` + reason |
-| Backend | 293 + 93 + 12 | Includes the rules-snapshot freshness test |
+| Vitest (`npm test`) | 116 | All 104 shared vectors (7 forms + bracket rules), catalog coverage, decimal/time helpers, tab-shared sign-in, push subscribe and its timeout |
+| Playwright (`npm run e2e`) | 15 | Real API + PostgreSQL. Login (wrong and right password); accounts, funds, balances, PnL and trade book from seeded data; trade drawer charts and legs; manual-exit confirmation; risk drawer rules (field + `CX_*`) then save; new account with field errors; typed confirmation for REAL with the server's refusal shown; socket event → toast; strategy and holiday cross-field rules; notification devices list and removal; remembered theme; global kill switch with `KILL` + reason; sign-in shared by a new tab and signed out everywhere; *Remember me* across closed tabs |
+| Backend | 293 + 108 + 17 | Includes the rules-snapshot freshness test, alert dispatch, and Web Push against a fake push service (VAPID signature checked, payload decrypted per RFC 8291) |
 
 `e2e/stack.mjs` recreates the e2e database, applies `db/migrations/*.sql`, loads `e2e/seed.sql`, then starts the API with the engine off. `e2e/env.mjs` lists the overridable ports and connection string.
 
-## 8. Running locally
+The PWA itself (service worker, install, offline shell, update prompt, push display) runs only in a production build; see Phase 5 §10 for how it was verified.
+
+## 9. Running locally
 ```bash
 cd backend && dotnet run --project src/TradeBot.Api   # :5080, needs ConnectionStrings:TradeBot, Security:MasterKey, Auth:*
 cd frontend && npm ci && npm start                     # :4200, proxies /api and /ws to :5080

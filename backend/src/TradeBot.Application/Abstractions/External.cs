@@ -85,6 +85,30 @@ public interface IAlertSender
     Task SendAsync(AlertKind kind, string html, CancellationToken ct);
 }
 
+// ---------- Web Push (installed dashboard / browser notifications) ----------
+
+public sealed record PushAlertKinds(bool Entry, bool Exit, bool Critical, bool Info);
+
+/// <summary>A browser's PushSubscription (endpoint + p256dh/auth keys) and which alerts it wants.</summary>
+public sealed record PushSubscribeRequest(string Endpoint, string P256dh, string Auth, string DeviceLabel, PushAlertKinds Kinds);
+
+public sealed record PushDevice(
+    long Id, string Endpoint, string DeviceLabel, PushAlertKinds Kinds, DateTime CreatedAt, DateTime? LastSuccessAt, int FailureCount, string? LastError);
+
+public sealed record PushDeliveryResult(int Sent, int Failed, int Removed);
+
+public interface IWebPushService
+{
+    /// <summary>VAPID public key (base64url) the browser subscribes with; the key pair is created on first use.</summary>
+    Task<string> PublicKeyAsync(CancellationToken ct);
+    Task<PushDevice> SubscribeAsync(PushSubscribeRequest request, CancellationToken ct);
+    Task<IReadOnlyList<PushDevice>> DevicesAsync(CancellationToken ct);
+    Task<PushDevice?> UpdateKindsAsync(long id, PushAlertKinds kinds, CancellationToken ct);
+    Task<bool> RemoveAsync(long id, CancellationToken ct);
+    /// <summary>Sends to every device that wants <paramref name="kind"/> (or only <paramref name="deviceId"/>); expired subscriptions are removed.</summary>
+    Task<PushDeliveryResult> SendAsync(AlertKind kind, string title, string body, long? deviceId, CancellationToken ct);
+}
+
 /// <summary>Cross-process notifications (PostgreSQL LISTEN/NOTIFY between API+Engine, News and Auth workers).</summary>
 public interface IEventBus
 {

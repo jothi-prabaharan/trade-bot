@@ -65,3 +65,29 @@ internal sealed class AlertChannelConfiguration : IEntityTypeConfiguration<Alert
         b.HasIndex(x => x.ChannelName).IsUnique();
     }
 }
+
+internal sealed class WebPushKeysConfiguration : IEntityTypeConfiguration<WebPushKeys>
+{
+    public void Configure(EntityTypeBuilder<WebPushKeys> b)
+    {
+        b.ToTable("web_push_keys", Schemas.Mst, t => t.HasCheckConstraint("ck_web_push_keys_single_row", $"web_push_keys_id = {WebPushKeys.SingletonId}"));
+        b.HasKey(x => x.WebPushKeysId);
+        b.Property(x => x.WebPushKeysId).ValueGeneratedNever();
+        b.Property(x => x.PublicKey).HasMaxLength(100);
+    }
+}
+
+internal sealed class WebPushSubscriptionConfiguration : IEntityTypeConfiguration<WebPushSubscription>
+{
+    public void Configure(EntityTypeBuilder<WebPushSubscription> b)
+    {
+        b.ToTable("web_push_subscriptions", Schemas.Mst, t =>
+            t.HasCheckConstraint("ck_web_push_subscriptions_https", "endpoint LIKE 'https://%'"));
+        b.HasKey(x => x.WebPushSubscriptionId);
+        b.Property(x => x.Endpoint).HasMaxLength(1000);
+        b.Property(x => x.P256dh).HasMaxLength(200);
+        b.Property(x => x.DeviceLabel).HasMaxLength(100);
+        b.Property(x => x.LastError).HasMaxLength(500);
+        b.HasIndex(x => x.Endpoint).IsUnique();
+    }
+}

@@ -1,4 +1,5 @@
 import { BrowserContext, Locator, Page, expect, test } from '@playwright/test';
+import { createECDH, randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { ADMIN_PASSWORD, dbConfig } from './env.mjs';
 
@@ -177,6 +178,33 @@ test('holidays: special sessions need times; a valid holiday is listed', async (
   await d.getByLabel('Special session (market opens briefly)').uncheck();
   await d.getByRole('button', { name: 'Add' }).click();
   await expect(d.locator('table tbody tr', { hasText: 'Christmas' })).toContainText('2026-12-25');
+  await page.keyboard.press('Escape');
+});
+
+test('notifications: devices from other browsers are listed; removing one asks first', async () => {
+  // A phone registered earlier; its keys only need the browser format, nothing is pushed
+  const ecdh = createECDH('prime256v1');
+  ecdh.generateKeys();
+  const token = await page.evaluate(() => JSON.parse(sessionStorage.getItem('tradebot.session') ?? '{}').token as string);
+  const created = await page.request.post('/api/push/devices', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      endpoint: 'https://push.example.test/send/e2e-phone', p256dh: ecdh.getPublicKey('base64url'), auth: randomBytes(16).toString('base64url'),
+      deviceLabel: 'Chrome on Android (app)', kinds: { critical: true, entry: false, exit: true, info: false },
+    },
+  });
+  expect(created.ok()).toBeTruthy();
+
+  await page.getByRole('button', { name: 'Notifications' }).click();
+  const d = drawer('Notifications');
+  // ng serve runs without a service worker; the production build has one
+  await expect(d).toContainText('need the production dashboard over HTTPS');
+  const row = d.locator('tbody tr', { hasText: 'Chrome on Android (app)' });
+  await expect(row).toContainText('Critical, Trade exits');
+  await row.getByRole('button', { name: 'Remove' }).click();
+  await page.getByRole('dialog', { name: 'Remove device' }).getByRole('button', { name: 'Remove' }).click();
+  await expect(row).toHaveCount(0);
+  await expect(d).toContainText('No devices yet');
   await page.keyboard.press('Escape');
 });
 
