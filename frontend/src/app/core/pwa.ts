@@ -22,6 +22,8 @@ export class PwaService {
 
   /** The browser offers installation (Chromium desktop/Android; iOS uses Share → Add to Home Screen). */
   readonly canInstall = signal(false);
+  /** iPhone/iPad Safari: no install prompt exists, the user adds it from the Share menu. */
+  readonly manualInstall = this.ios() && !(this.window.matchMedia?.('(display-mode: standalone)').matches ?? false);
   /** Running as the installed app rather than in a browser tab. */
   readonly installed = signal(this.window.matchMedia?.('(display-mode: standalone)').matches ?? false);
   /** 'ready': a new version is downloaded; 'broken': the cached version can't be served, reload needed. */
@@ -78,6 +80,12 @@ export class PwaService {
       try { await this.updates.activateUpdate(); } catch { /* reload fetches the new version anyway */ }
     }
     this.window.location.reload();
+  }
+
+  private ios(): boolean {
+    const n = this.window.navigator;
+    // iPadOS reports itself as a Mac with touch
+    return /iPhone|iPad|iPod/.test(n.userAgent) || (/Macintosh/.test(n.userAgent) && n.maxTouchPoints > 1);
   }
 
   private async check(): Promise<void> {

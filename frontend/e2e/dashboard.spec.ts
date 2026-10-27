@@ -208,6 +208,39 @@ test('notifications: devices from other browsers are listed; removing one asks f
   await page.keyboard.press('Escape');
 });
 
+test('phone: settings move to a menu, lists replace tables, Escape closes only the top dialog', async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('button', { name: 'Strategy settings' })).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Kill switch' })).toBeVisible();
+  expect((await page.locator('tb-header-bar header').boundingBox())!.height).toBeLessThan(130);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  // Trades and signals become lists with a compact / detail view
+  const tradesSection = page.locator('section[aria-label="Today\'s trades"]');
+  const beta = page.getByRole('list', { name: 'Trades' }).locator('li', { hasText: 'Paper Beta' });
+  await expect(beta.getByRole('button', { name: 'Exit' })).toBeVisible();
+  await tradesSection.getByRole('button', { name: 'Detail' }).click();
+  await expect(beta).toContainText('% from SL to target');
+  await tradesSection.getByRole('button', { name: 'Compact' }).click();
+  await expect(beta).not.toContainText('from SL to target');
+  await page.getByRole('tab', { name: /Signals/ }).click();
+  await expect(page.getByRole('list', { name: 'Signals' }).locator('li')).toHaveCount(3);
+
+  // Menu → Market holidays; a confirmation over the drawer takes the first Escape
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Market holidays' }).click();
+  const d = drawer('Market holidays');
+  await d.locator('table tbody tr', { hasText: 'Christmas' }).getByRole('button', { name: 'Delete' }).click();
+  const ask = page.getByRole('dialog', { name: 'Delete holiday' });
+  await expect(ask).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(ask).toBeHidden();
+  await expect(d).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(d).toBeHidden();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+});
+
 test('theme toggle is remembered across reloads', async () => {
   await expect(page.locator('html')).toHaveAttribute('data-bs-theme', 'dark');
   await page.getByRole('button', { name: 'Light theme' }).click();

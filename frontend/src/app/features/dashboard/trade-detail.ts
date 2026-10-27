@@ -52,16 +52,18 @@ interface Pivot { t: string; price: number; high: boolean }
         <h3 class="h6 mt-3">Order legs</h3>
         <div class="table-responsive">
           <table class="table table-sm tb-grid">
-            <thead><tr><th>Leg</th><th>Side</th><th class="text-end">Qty</th><th>Type</th><th class="text-end">Price</th><th class="text-end">Trigger</th><th class="text-end">SL / Target</th><th>Status</th><th>Placed</th><th>Broker #</th></tr></thead>
+            <thead><tr><th>Leg</th><th class="d-none d-sm-table-cell">Side</th><th class="text-end">Qty</th><th class="d-none d-sm-table-cell">Type</th><th class="text-end">Price</th><th class="text-end d-none d-sm-table-cell">Trigger</th><th class="text-end d-none d-sm-table-cell">SL / Target</th><th>Status</th><th class="d-none d-sm-table-cell">Placed</th><th class="d-none d-sm-table-cell">Broker #</th></tr></thead>
             <tbody>
               @for (o of d.orders; track o.orderId) {
                 <tr>
-                  <td>{{ leg(o.orderLegType) }}</td><td>{{ o.txnType === 'B' ? 'BUY' : 'SELL' }}</td>
-                  <td class="num text-end">{{ o.filledQuantity }}/{{ o.quantity }}</td><td>{{ o.orderType }}</td>
-                  <td class="num text-end">{{ (o.avgFillPrice ?? o.price) | price }}</td><td class="num text-end">{{ o.triggerPrice | price }}</td>
-                  <td class="num text-end">{{ o.stopLossPrice | price }} / {{ o.targetSellPrice | price }}</td>
-                  <td>{{ o.status }} @if (o.rejectionReason) { <span class="small text-danger d-block">{{ o.rejectionReason }}</span> }</td>
-                  <td class="num">{{ o.placedAt | ist }}</td><td class="small">{{ o.brokerOrderNo ?? '—' }}</td>
+                  <td>{{ leg(o.orderLegType) }}</td><td class="d-none d-sm-table-cell">{{ o.txnType === 'B' ? 'BUY' : 'SELL' }}</td>
+                  <td class="num text-end">{{ o.filledQuantity }}/{{ o.quantity }}</td><td class="d-none d-sm-table-cell">{{ o.orderType }}</td>
+                  <td class="num text-end">{{ (o.avgFillPrice ?? o.price) | price }}
+                    @if (o.triggerPrice) { <div class="small text-body-secondary d-sm-none">trigger {{ o.triggerPrice | price }}</div> }
+                  </td><td class="num text-end d-none d-sm-table-cell">{{ o.triggerPrice | price }}</td>
+                  <td class="num text-end d-none d-sm-table-cell">{{ o.stopLossPrice | price }} / {{ o.targetSellPrice | price }}</td>
+                  <td class="tb-wrap">{{ o.status }} @if (o.rejectionReason) { <span class="small text-danger d-block">{{ o.rejectionReason }}</span> }</td>
+                  <td class="num d-none d-sm-table-cell">{{ o.placedAt | ist }}</td><td class="small d-none d-sm-table-cell">{{ o.brokerOrderNo ?? '—' }}</td>
                 </tr>
               }
             </tbody>

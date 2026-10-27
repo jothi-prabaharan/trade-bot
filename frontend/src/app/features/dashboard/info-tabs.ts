@@ -5,9 +5,11 @@ import { faArrowsRotate, faMagnifyingGlassChart } from '@fortawesome/free-solid-
 import { firstValueFrom } from 'rxjs';
 import { ApiService, apiErrorText } from '../../core/api';
 import { DashboardStore } from '../../core/dashboard-store';
+import { LayoutService, rememberedView } from '../../core/layout';
 import { ImpactLevel, InstrumentDto, NewsItem, Sentiment, Severity, Signal } from '../../core/models';
 import { ToastService } from '../../core/ui-state';
 import { IstPipe, PricePipe } from '../../shared/format';
+import { ViewToggle } from '../../shared/ui';
 import { BIAS_BADGE } from './trade-grid';
 
 type Tab = 'signals' | 'news' | 'events';
@@ -18,20 +20,21 @@ const SIGNAL_BADGE: Record<string, string> = { NEW: 'text-bg-info', DISPATCHED: 
 
 @Component({
   selector: 'tb-info-tabs',
-  imports: [FormsModule, FaIconComponent, IstPipe, PricePipe],
+  imports: [FormsModule, FaIconComponent, IstPipe, PricePipe, ViewToggle],
   template: `
     <section class="tb-panel" aria-label="Signals, news and events">
       <div class="d-flex align-items-center gap-2 p-2 border-bottom flex-wrap">
-        <ul class="nav nav-pills nav-sm" role="tablist">
+        <ul class="nav nav-pills nav-sm" [class.nav-fill]="layout.phone()" [class.w-100]="layout.phone()" role="tablist">
           @for (t of tabs; track t.id) {
             <li class="nav-item" role="presentation">
               <button type="button" class="nav-link py-1 px-3" role="tab" [class.active]="tab() === t.id" [attr.aria-selected]="tab() === t.id" (click)="tab.set(t.id)">
-                {{ t.label }} <span class="badge text-bg-secondary ms-1">{{ count(t.id) }}</span>
+                {{ layout.phone() ? t.short : t.label }} <span class="badge text-bg-secondary ms-1">{{ count(t.id) }}</span>
               </button>
             </li>
           }
         </ul>
-        <div class="ms-auto d-flex gap-2 align-items-center">
+        @if (layout.phone()) { <tb-view-toggle [(view)]="view" /> }
+        <div class="ms-auto d-flex flex-wrap justify-content-end gap-2 align-items-center">
           @if (tab() === 'news') {
             <label class="visually-hidden" for="tb-scan-target">Scan target</label>
             <select id="tb-scan-target" class="form-select form-select-sm w-auto" [ngModel]="scanTarget()" (ngModelChange)="scanTarget.set($event)">
@@ -44,9 +47,38 @@ const SIGNAL_BADGE: Record<string, string> = { NEW: 'text-bg-info', DISPATCHED: 
         </div>
       </div>
 
-      <div class="table-responsive" style="max-height: 380px">
+      <!-- Phones: lists in the page flow; wider screens: scrollable tables -->
+      <div [class.table-responsive]="!layout.phone()" [style.max-height]="layout.phone() ? null : '380px'">
         @switch (tab()) {
           @case ('signals') {
+            @if (layout.phone()) {
+              <ul class="tb-list" aria-label="Signals">
+                @for (s of signals(); track s.signalId) {
+                  <li class="tb-list-item">
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="flex-grow-1 min-w-0">
+                        <div class="fw-semibold text-truncate">{{ s.security?.pmlSymbol ?? s.securityId }}</div>
+                        <div class="small text-body-secondary text-truncate">{{ s.createdAt | ist }} · {{ s.detection?.pattern?.patternName ?? '—' }} {{ s.detection?.timeframe }}</div>
+                      </div>
+                      <div class="text-end">
+                        <span class="badge" [class]="signalBadge(s.status)">{{ s.status }}</span>
+                        <div class="small num text-body-secondary">conf {{ s.combinedAiConfidence }}</div>
+                      </div>
+                    </div>
+                    @if (view() === 'detail') {
+                      <div class="row g-2 small mt-1">
+                        <div class="col-4"><div class="tb-label">Entry</div><div class="num">{{ s.entryOptionLtp | price }}</div></div>
+                        <div class="col-4"><div class="tb-label">SL</div><div class="num text-danger">{{ s.mandatorySlPrice | price }}</div></div>
+                        <div class="col-4"><div class="tb-label">Target</div><div class="num text-success">{{ s.mandatoryTargetPrice | price }}</div></div>
+                        <div class="col-4"><div class="tb-label">RR</div><div class="num">{{ s.riskRewardRatio }}</div></div>
+                        <div class="col-8"><div class="tb-label">Pattern / News / OI</div><div class="num">{{ s.patternScore }} / {{ s.newsScore }} / {{ s.oiGreeksScore }}</div></div>
+                      </div>
+                      @if (s.rejectionReason) { <div class="small text-body-secondary mt-1">{{ s.rejectionReason }}</div> }
+                    }
+                  </li>
+                } @empty { <li class="tb-list-item text-center text-body-secondary py-4">No signals yet today.</li> }
+              </ul>
+            } @else {
             <table class="table table-sm tb-grid mb-0">
               <thead><tr><th>Time</th><th>Contract</th><th>Pattern</th><th class="text-end">Entry</th><th class="text-end">SL</th><th class="text-end">Target</th><th class="text-end">RR</th><th class="text-end">Pat / News / OI</th><th class="text-end">Conf.</th><th>Status</th><th>Reason</th></tr></thead>
               <tbody>
@@ -63,6 +95,7 @@ const SIGNAL_BADGE: Record<string, string> = { NEW: 'text-bg-info', DISPATCHED: 
                 } @empty { <tr><td colspan="11" class="text-center text-body-secondary py-4">No signals yet today.</td></tr> }
               </tbody>
             </table>
+            }
           }
           @case ('news') {
             <div class="p-2 d-flex flex-wrap gap-2 border-bottom">
@@ -73,6 +106,31 @@ const SIGNAL_BADGE: Record<string, string> = { NEW: 'text-bg-info', DISPATCHED: 
                 </span>
               } @empty { <span class="small text-body-secondary">No sentiment computed yet (pre-market scan runs at 08:30 IST).</span> }
             </div>
+            @if (layout.phone()) {
+              <ul class="tb-list" aria-label="News">
+                @for (n of news(); track n.newsId) {
+                  <li class="tb-list-item">
+                    <div class="d-flex align-items-start gap-2">
+                      <div class="flex-grow-1 min-w-0">
+                        <div [class.tb-clamp-2]="view() === 'compact'">{{ n.headline }}</div>
+                        <div class="small text-body-secondary">{{ n.company?.nseSymbol ?? (n.instrumentId ? symbol(n.instrumentId) : 'Market') }} · {{ n.analyzedAt | ist }}</div>
+                      </div>
+                      <div class="text-end">
+                        <span class="badge" [class]="impact(n.impactLevel)">{{ n.impactLevel }}</span>
+                        <div class="small num" [class]="n.sentimentScore > 0 ? 'text-success' : n.sentimentScore < 0 ? 'text-danger' : ''">{{ n.sentimentScore }}</div>
+                      </div>
+                    </div>
+                    @if (view() === 'detail') {
+                      @if (n.summary) { <div class="small mt-1">{{ n.summary }}</div> }
+                      <div class="small text-body-secondary mt-1">
+                        {{ n.newsCategory }} · {{ n.scanType }}
+                        @for (u of urls(n); track u; let idx = $index) { <a class="ms-1" [href]="u" target="_blank" rel="noopener noreferrer">Source {{ idx + 1 }}</a> }
+                      </div>
+                    }
+                  </li>
+                } @empty { <li class="tb-list-item text-center text-body-secondary py-4">No news stored today.</li> }
+              </ul>
+            } @else {
             <table class="table table-sm tb-grid mb-0">
               <thead><tr><th>Time</th><th>Target</th><th>Headline</th><th>Category</th><th>Impact</th><th class="text-end">Score</th><th>Scan</th></tr></thead>
               <tbody>
@@ -92,8 +150,28 @@ const SIGNAL_BADGE: Record<string, string> = { NEW: 'text-bg-info', DISPATCHED: 
                 } @empty { <tr><td colspan="7" class="text-center text-body-secondary py-4">No news stored today.</td></tr> }
               </tbody>
             </table>
+            }
           }
           @case ('events') {
+            @if (layout.phone()) {
+              <ul class="tb-list" aria-label="Events">
+                @for (e of store.events(); track e.eventId) {
+                  <li class="tb-list-item">
+                    <div class="d-flex align-items-center gap-2 small">
+                      <span class="badge" [class]="severity(e.severity)">{{ e.severity }}</span>
+                      <span class="fw-semibold text-truncate">{{ e.eventType }}</span>
+                      <span class="ms-auto num text-body-secondary text-nowrap">{{ e.createdAt | ist: view() === 'detail' }}</span>
+                    </div>
+                    @if (view() === 'compact') {
+                      <div class="small text-body-secondary text-truncate">{{ e.message }}</div>
+                    } @else {
+                      @if (e.accountId !== null) { <div class="small text-body-secondary">{{ accountName(e.accountId) }}</div> }
+                      <div class="small">{{ e.message }}</div>
+                    }
+                  </li>
+                } @empty { <li class="tb-list-item text-center text-body-secondary py-4">No events.</li> }
+              </ul>
+            } @else {
             <table class="table table-sm tb-grid mb-0">
               <thead><tr><th>Time</th><th>Severity</th><th>Type</th><th>Account</th><th>Message</th></tr></thead>
               <tbody>
@@ -105,6 +183,7 @@ const SIGNAL_BADGE: Record<string, string> = { NEW: 'text-bg-info', DISPATCHED: 
                 } @empty { <tr><td colspan="5" class="text-center text-body-secondary py-4">No events.</td></tr> }
               </tbody>
             </table>
+            }
           }
         }
       </div>
@@ -113,11 +192,13 @@ const SIGNAL_BADGE: Record<string, string> = { NEW: 'text-bg-info', DISPATCHED: 
 })
 export class InfoTabs {
   protected readonly store = inject(DashboardStore);
+  protected readonly layout = inject(LayoutService);
+  protected readonly view = rememberedView('info');
   private readonly api = inject(ApiService);
   private readonly toasts = inject(ToastService);
   protected readonly i = { refresh: faArrowsRotate, scan: faMagnifyingGlassChart };
-  protected readonly tabs: { id: Tab; label: string }[] = [
-    { id: 'signals', label: 'Signals' }, { id: 'news', label: 'News & sentiment' }, { id: 'events', label: 'Events' },
+  protected readonly tabs: { id: Tab; label: string; short: string }[] = [
+    { id: 'signals', label: 'Signals', short: 'Signals' }, { id: 'news', label: 'News & sentiment', short: 'News' }, { id: 'events', label: 'Events', short: 'Events' },
   ];
 
   protected readonly tab = signal<Tab>('signals');

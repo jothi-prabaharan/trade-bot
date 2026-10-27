@@ -1,13 +1,28 @@
-import { Component, Injectable, computed, input, model, output, signal } from '@angular/core';
+import { Component, ElementRef, Injectable, computed, effect, inject, input, model, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
 import { faCircleExclamation, faTriangleExclamation, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { ListView } from '../core/layout';
 import { ToastService } from '../core/ui-state';
+
+/** Compact / Detail switch for the phone lists. */
+@Component({
+  selector: 'tb-view-toggle',
+  template: `
+    <div class="btn-group btn-group-sm" role="group" aria-label="List view">
+      <button type="button" class="btn" [class]="view() === 'compact' ? 'btn-secondary' : 'btn-outline-secondary'" [attr.aria-pressed]="view() === 'compact'" (click)="view.set('compact')">Compact</button>
+      <button type="button" class="btn" [class]="view() === 'detail' ? 'btn-secondary' : 'btn-outline-secondary'" [attr.aria-pressed]="view() === 'detail'" (click)="view.set('detail')">Detail</button>
+    </div>
+  `,
+})
+export class ViewToggle {
+  readonly view = model.required<ListView>();
+}
 
 /** Bootstrap offcanvas driven by a signal (no Bootstrap JS). */
 @Component({
   selector: 'tb-drawer',
-  host: { '(document:keydown.escape)': 'open() && close()' },
+  host: { '(document:keydown.escape)': 'escape($event)' },
   template: `
     @if (open()) {
       <div class="offcanvas offcanvas-end show tb-drawer" [style.--bs-offcanvas-width]="width()" tabindex="-1" role="dialog" aria-modal="true" [attr.aria-label]="title()">
@@ -23,6 +38,7 @@ import { ToastService } from '../core/ui-state';
   `,
 })
 export class Drawer {
+  protected readonly confirm = inject(ConfirmService);
   readonly open = model(false);
   readonly title = input('');
   readonly width = input('560px');
@@ -31,6 +47,12 @@ export class Drawer {
   close(): void {
     this.open.set(false);
     this.closed.emit();
+  }
+
+  // Returns nothing on purpose: an Angular listener that returns false calls preventDefault().
+  // A confirmation dialog on top takes the Escape (see ConfirmHost).
+  protected escape(e: Event): void {
+    if (this.open() && !e.defaultPrevented && !this.confirm.current()) this.close();
   }
 }
 
@@ -58,9 +80,10 @@ export class ConfirmService {
 @Component({
   selector: 'tb-confirm-host',
   imports: [FormsModule, FaIconComponent],
+  host: { '(document:keydown.escape)': 'escape($event)' },
   template: `
     @if (svc.current(); as req) {
-      <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true" [attr.aria-label]="req.title" (keydown.escape)="finish(false)">
+      <div #dialog class="modal d-block" tabindex="-1" role="dialog" aria-modal="true" [attr.aria-label]="req.title">
         <div class="modal-dialog modal-dialog-centered">
           <div class="modal-content">
             <div class="modal-header">
@@ -81,7 +104,7 @@ export class ConfirmService {
               }
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-outline-secondary" (click)="finish(false)">Cancel</button>
+              <button type="button" class="btn btn-outline-secondary" data-autofocus (click)="finish(false)">Cancel</button>
               <button type="button" class="btn" [class]="req.danger ? 'btn-danger' : 'btn-warning'" [disabled]="!ready()" (click)="finish(true)">{{ req.confirmLabel }}</button>
             </div>
           </div>
@@ -96,7 +119,15 @@ export class ConfirmHost {
   protected readonly typedValue = signal('');
   protected readonly reasonValue = signal('');
 
-  constructor(protected readonly svc: ConfirmService) {}
+  private readonly dialog = viewChild<ElementRef<HTMLElement>>('dialog');
+
+  constructor(protected readonly svc: ConfirmService) {
+    // Focus moves into the dialog: the typed confirmation if there is one, else Cancel (the safe choice)
+    effect(() => {
+      const el = this.dialog()?.nativeElement;
+      el?.querySelector<HTMLElement>('#tb-confirm-typed, [data-autofocus]')?.focus();
+    });
+  }
 
   protected get typed(): string { return this.typedValue(); }
   protected set typed(v: string) { this.typedValue.set(v); }
@@ -109,6 +140,13 @@ export class ConfirmHost {
     if (req.typeToConfirm && this.typedValue().trim() !== req.typeToConfirm) return false;
     return !req.askReason || this.reasonValue().trim().length > 0;
   });
+
+  protected escape(e: Event): void {
+    if (!this.svc.current()) return;
+    // Tells the drawer underneath that this Escape is taken
+    e.preventDefault();
+    this.finish(false);
+  }
 
   protected finish(ok: boolean): void {
     const req = this.svc.current();

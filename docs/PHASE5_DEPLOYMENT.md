@@ -186,7 +186,7 @@ Trading alerts (entries, exits, kill switch, login failures) come from the appli
 | Backup → scratch restore → `migrate` | identical row counts; migration history intact; tampered dump rejected by checksum |
 | `migrate` / `seed` CLI on an empty database, twice | 4 migrations, 3 indices + 220 stocks + 130 patterns + 15 holidays + 2 charge rates; second run changes nothing |
 | Release publish | API and news 11 MB each (no Playwright driver); auth carries the Linux driver |
-| Test suites | backend 293 + 108 + 17, Vitest 116, Playwright 15, all passing |
+| Test suites | backend 293 + 108 + 17, Vitest 116, Playwright 16, all passing |
 
 Bugs found and fixed during validation:
 - `http2 on;` needs nginx 1.25.1+, so the 1.24 `listen … http2` form is used.

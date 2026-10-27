@@ -18,6 +18,13 @@ One page; every editor opens as an offcanvas drawer over it, so the trade book s
 
 ![Trade drawer](images/trade-drawer.png)
 
+### Phones and touch screens
+- **Header (below 768 px):** logo, market status and a ☰ **Menu**, then the account scope and **Kill switch**, which stays one tap away. The menu holds the settings drawers, Notifications, Install app (or the iPhone *Share → Add to Home Screen* steps), mute, theme, sign-out and the feed/engine/link status.
+- **Lists instead of tables:** today's trades, signals, news and events render as lists with a **Compact | Detail** switch per section, remembered per browser. Compact: one dense row (trades keep Net PnL and **Exit**). Detail: a card with every field (prices, SL → target bar, pattern/news badges, scores, reasons). Tapping a trade opens its drawer. Tablets and desktops keep the tables; the trade table pins its Exit column when it scrolls sideways.
+- **Drawers and dialogs:** full width, single-column forms with the Save/Cancel footer pinned; wide tables drop secondary columns (pattern code/direction/flags, order-leg side/type/placed/broker #).
+- **Touch sizing:** on touch screens buttons, inputs, tabs and close buttons are about 40 px tall, and inputs use 16 px text so iOS Safari does not zoom on focus.
+- **Keyboard:** Escape closes the top-most layer only (a confirmation over a drawer closes first), and dialogs move focus to the typed confirmation or to Cancel.
+
 ### Sign-in
 - **Every tab shares the sign-in.** A new tab asks the open tabs for the session over a `BroadcastChannel` (up to 300 ms) and keeps it in its own `sessionStorage`; the session ends when the last tab closes, or after 8 hours.
 - **Remember me** (unticked by default) keeps the session in `localStorage` with a 30-day token, so it survives browser restarts. Don't tick it on a shared computer.
@@ -101,7 +108,7 @@ One page; every editor opens as an offcanvas drawer over it, so the trade book s
 | Suite | Count | What it covers |
 |---|---|---|
 | Vitest (`npm test`) | 116 | All 104 shared vectors (7 forms + bracket rules), catalog coverage, decimal/time helpers, tab-shared sign-in, push subscribe and its timeout |
-| Playwright (`npm run e2e`) | 15 | Real API + PostgreSQL. Login (wrong and right password); accounts, funds, balances, PnL and trade book from seeded data; trade drawer charts and legs; manual-exit confirmation; risk drawer rules (field + `CX_*`) then save; new account with field errors; typed confirmation for REAL with the server's refusal shown; socket event → toast; strategy and holiday cross-field rules; notification devices list and removal; remembered theme; global kill switch with `KILL` + reason; sign-in shared by a new tab and signed out everywhere; *Remember me* across closed tabs |
+| Playwright (`npm run e2e`) | 16 | Real API + PostgreSQL. Login (wrong and right password); accounts, funds, balances, PnL and trade book from seeded data; trade drawer charts and legs; manual-exit confirmation; risk drawer rules (field + `CX_*`) then save; new account with field errors; typed confirmation for REAL with the server's refusal shown; socket event → toast; strategy and holiday cross-field rules; notification devices list and removal; remembered theme; global kill switch with `KILL` + reason; sign-in shared by a new tab and signed out everywhere; *Remember me* across closed tabs; phone layout (menu, compact/detail lists, Escape over a drawer) |
 | Backend | 293 + 108 + 17 | Includes the rules-snapshot freshness test, alert dispatch, and Web Push against a fake push service (VAPID signature checked, payload decrypted per RFC 8291) |
 
 `e2e/stack.mjs` recreates the e2e database, applies `db/migrations/*.sql`, loads `e2e/seed.sql`, then starts the API with the engine off. `e2e/env.mjs` lists the overridable ports and connection string.

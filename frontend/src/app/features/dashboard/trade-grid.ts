@@ -5,11 +5,12 @@ import { faArrowRightFromBracket, faNewspaper, faShapes } from '@fortawesome/fre
 import { firstValueFrom } from 'rxjs';
 import { ApiService, apiErrorText } from '../../core/api';
 import { DashboardStore } from '../../core/dashboard-store';
+import { LayoutService, rememberedView } from '../../core/layout';
 import { MarketBias, TradeRow, TradeStatus } from '../../core/models';
 import { PanelService } from '../../core/panels';
 import { ToastService } from '../../core/ui-state';
 import { InrPipe, IstPipe, PricePipe, pnlClass } from '../../shared/format';
-import { ConfirmService } from '../../shared/ui';
+import { ConfirmService, ViewToggle } from '../../shared/ui';
 
 export const STATUS_BADGE: Record<TradeStatus, { text: string; cls: string }> = {
   OPEN: { text: 'Open', cls: 'text-bg-primary' },
@@ -25,18 +26,84 @@ export const BIAS_BADGE: Record<MarketBias, string> = { BULLISH: 'text-bg-succes
 
 @Component({
   selector: 'tb-trade-grid',
-  imports: [FormsModule, FaIconComponent, InrPipe, IstPipe, PricePipe],
+  imports: [FormsModule, FaIconComponent, InrPipe, IstPipe, PricePipe, ViewToggle],
   template: `
     <section class="tb-panel" aria-label="Today's trades">
       <div class="d-flex align-items-center gap-3 p-3 pb-2 flex-wrap">
         <h2 class="h6 mb-0">Today's trades</h2>
         <span class="badge text-bg-primary">{{ openCount() }} open</span>
         <span class="small text-body-secondary">{{ rows().length }} shown</span>
-        <div class="form-check form-switch ms-auto mb-0">
+        @if (layout.phone()) { <tb-view-toggle class="ms-auto" [(view)]="view" /> }
+        <div class="form-check form-switch mb-0" [class.ms-auto]="!layout.phone()">
           <input class="form-check-input" type="checkbox" id="tb-open-only" [ngModel]="openOnly()" (ngModelChange)="openOnly.set($event)" />
           <label class="form-check-label small" for="tb-open-only">Open only</label>
         </div>
       </div>
+      @if (layout.phone()) {
+        <ul class="tb-list" aria-label="Trades">
+          @for (t of rows(); track t.tradeId) {
+            <li class="tb-list-item tb-clickable" [attr.data-trade-id]="t.tradeId" (click)="panels.open('trade', t.tradeId)">
+              @if (view() === 'compact') {
+                <div class="d-flex align-items-center gap-2">
+                  <div class="flex-grow-1 min-w-0">
+                    <div class="fw-semibold text-truncate">{{ t.contract }}</div>
+                    <div class="small text-body-secondary text-truncate">
+                      <span class="badge" [class]="status(t.status).cls">{{ status(t.status).text }}</span> {{ t.accountName }} · {{ t.mode }}
+                    </div>
+                  </div>
+                  <div class="text-end">
+                    <div class="num fw-semibold" [class]="pnlClass(t.netPnl)">{{ t.netPnl | inr: 'signed' }}</div>
+                    <div class="small num text-body-secondary">{{ (t.status === 'OPEN' ? t.ltp : t.exitPrice) | price }}</div>
+                  </div>
+                  @if (t.status === 'OPEN') {
+                    <button type="button" class="btn btn-sm btn-outline-danger text-nowrap" (click)="$event.stopPropagation(); exit(t)" [disabled]="exiting().has(t.tradeId)">
+                      <fa-icon [icon]="i.exit" class="me-1" />Exit
+                    </button>
+                  }
+                </div>
+              } @else {
+                <div class="d-flex align-items-start gap-2 mb-2">
+                  <div class="flex-grow-1 min-w-0">
+                    <div class="fw-semibold">{{ t.contract }}</div>
+                    <div class="small text-body-secondary">
+                      {{ t.accountName }} <span class="badge" [class]="t.mode === 'REAL' ? 'text-bg-danger' : 'text-bg-primary'">{{ t.mode }}</span> · {{ t.entryTimeUtc | ist }}
+                    </div>
+                  </div>
+                  <span class="badge" [class]="status(t.status).cls">{{ status(t.status).text }}</span>
+                </div>
+                <div class="row g-2 small mb-2">
+                  <div class="col-4"><div class="tb-label">Qty</div><div class="num">{{ t.quantity }} <span class="text-body-secondary">({{ t.lots }}L)</span></div></div>
+                  <div class="col-4"><div class="tb-label">Entry ₹</div><div class="num">{{ t.entryPrice | price }}</div></div>
+                  <div class="col-4"><div class="tb-label">{{ t.status === 'OPEN' ? 'LTP' : 'Exit' }}</div><div class="num fw-semibold">{{ (t.status === 'OPEN' ? t.ltp : t.exitPrice) | price }}</div></div>
+                  <div class="col-4"><div class="tb-label">SL</div><div class="num text-danger">{{ t.stopLoss | price }}</div></div>
+                  <div class="col-4"><div class="tb-label">Trail SL</div><div class="num" [class.text-warning]="t.trailingSl > t.stopLoss">{{ t.trailingSl | price }}</div></div>
+                  <div class="col-4"><div class="tb-label">Target</div><div class="num text-success">{{ t.target | price }}</div></div>
+                </div>
+                <div class="tb-bracket mb-1" role="progressbar" [attr.aria-valuenow]="t.progressPct" aria-valuemin="0" aria-valuemax="100" aria-label="SL to target">
+                  <div class="tb-fill" [style.width.%]="t.progressPct"></div>
+                </div>
+                <div class="small num text-body-secondary mb-2">{{ t.progressPct }}% from SL to target</div>
+                @if (t.patternName || t.newsSentiment) {
+                  <div class="d-flex flex-wrap gap-1 mb-2">
+                    @if (t.patternName) { <span class="badge text-bg-dark border"><fa-icon [icon]="i.pattern" class="me-1" />{{ t.patternName }}{{ t.patternTimeframe ? ' · ' + t.patternTimeframe : '' }}</span> }
+                    @if (t.newsSentiment) { <span class="badge" [class]="bias(t.newsSentiment)"><fa-icon [icon]="i.news" class="me-1" />{{ t.newsSentiment }}</span> }
+                  </div>
+                }
+                <div class="d-flex align-items-center gap-2">
+                  <div class="num fw-semibold flex-grow-1" [class]="pnlClass(t.netPnl)">{{ t.netPnl | inr: 'signed' }} <span class="small fw-normal">({{ t.netPnlPct }}%)</span></div>
+                  @if (t.status === 'OPEN') {
+                    <button type="button" class="btn btn-sm btn-outline-danger text-nowrap" (click)="$event.stopPropagation(); exit(t)" [disabled]="exiting().has(t.tradeId)">
+                      <fa-icon [icon]="i.exit" class="me-1" />Exit
+                    </button>
+                  }
+                </div>
+              }
+            </li>
+          } @empty {
+            <li class="tb-list-item text-center text-body-secondary py-4">No trades yet today.</li>
+          }
+        </ul>
+      } @else {
       <div class="table-responsive" style="max-height: 460px">
         <table class="table table-sm table-hover tb-grid mb-0">
           <thead>
@@ -44,7 +111,7 @@ export const BIAS_BADGE: Record<MarketBias, string> = { BULLISH: 'text-bg-succes
               <th>Entry</th><th>Account</th><th>Contract</th><th class="text-end">Qty</th>
               <th class="text-end">Entry ₹</th><th class="text-end">SL</th><th class="text-end">Trail SL</th><th class="text-end">Target</th>
               <th class="text-end">LTP / Exit</th><th style="min-width: 120px">SL → Target</th><th>Signal</th><th>Status</th>
-              <th class="text-end">Net PnL</th><th></th>
+              <th class="text-end">Net PnL</th><th class="tb-pin-end"></th>
             </tr>
           </thead>
           <tbody>
@@ -71,9 +138,10 @@ export const BIAS_BADGE: Record<MarketBias, string> = { BULLISH: 'text-bg-succes
                 </td>
                 <td><span class="badge" [class]="status(t.status).cls">{{ status(t.status).text }}</span></td>
                 <td class="num text-end fw-semibold" [class]="pnlClass(t.netPnl)">{{ t.netPnl | inr: 'signed' }}<div class="small fw-normal">{{ t.netPnlPct }}%</div></td>
-                <td>
+                <!-- Pinned: Exit stays in view when the table scrolls sideways (tablets) -->
+                <td class="tb-pin-end">
                   @if (t.status === 'OPEN') {
-                    <button type="button" class="btn btn-sm btn-outline-danger py-0" (click)="$event.stopPropagation(); exit(t)" [disabled]="exiting().has(t.tradeId)">
+                    <button type="button" class="btn btn-sm btn-outline-danger py-0 text-nowrap" (click)="$event.stopPropagation(); exit(t)" [disabled]="exiting().has(t.tradeId)">
                       <fa-icon [icon]="i.exit" class="me-1" />Exit
                     </button>
                   }
@@ -85,12 +153,15 @@ export const BIAS_BADGE: Record<MarketBias, string> = { BULLISH: 'text-bg-succes
           </tbody>
         </table>
       </div>
+      }
     </section>
   `,
 })
 export class TradeGrid {
   protected readonly store = inject(DashboardStore);
   protected readonly panels = inject(PanelService);
+  protected readonly layout = inject(LayoutService);
+  protected readonly view = rememberedView('trades');
   private readonly api = inject(ApiService);
   private readonly confirm = inject(ConfirmService);
   private readonly toasts = inject(ToastService);

@@ -84,7 +84,7 @@ interface CardView { card: AccountCard; profile: AccountDto | undefined; pnl: Ac
               @else if (p.profitLock) { <div class="alert alert-success py-1 px-2 small mb-2">Profit locked: {{ p.haltReason }}</div> }
             }
 
-            <div class="d-flex flex-wrap gap-1">
+            <div class="d-flex flex-wrap gap-1 tb-card-actions">
               <button type="button" class="btn btn-sm btn-outline-secondary" (click)="panels.open('account', v.card.accountId)"><fa-icon [icon]="i.edit" class="me-1" />Profile</button>
               <button type="button" class="btn btn-sm btn-outline-secondary" (click)="panels.open('risk', v.card.accountId)"><fa-icon [icon]="i.risk" class="me-1" />Risk</button>
               <button type="button" class="btn btn-sm btn-outline-secondary" (click)="toggleMode(v.card)"><fa-icon [icon]="i.mode" class="me-1" />{{ v.card.mode === 'REAL' ? 'To PAPER' : 'To REAL' }}</button>

@@ -53,19 +53,25 @@ const CATEGORY_LABEL: Record<PatternCategory, string> = {
         </div>
         <div class="table-responsive">
           <table class="table table-sm tb-grid mb-0">
-            <thead><tr><th>On</th><th>Pattern</th><th>Code</th><th>Direction</th><th class="text-end">Weight</th><th>Vol.</th><th>Close</th><th></th></tr></thead>
+            <thead><tr>
+              <th>On</th><th>Pattern</th><th class="d-none d-sm-table-cell">Code</th><th class="d-none d-sm-table-cell">Direction</th><th class="text-end">Weight</th>
+              <th class="d-none d-sm-table-cell" title="Requires volume confirmation">Vol.</th><th class="d-none d-sm-table-cell" title="Requires a breakout close">Close</th><th></th>
+            </tr></thead>
             <tbody>
               @for (r of g.rows; track r.pattern.patternId) {
                 <tr [class.text-body-secondary]="!r.pattern.isActive">
                   <td><div class="form-check form-switch mb-0">
                     <input class="form-check-input" type="checkbox" [attr.aria-label]="'Toggle ' + r.pattern.patternName" [checked]="r.pattern.isActive" (change)="toggle(r.pattern)" />
                   </div></td>
-                  <td>{{ r.pattern.patternName }} @if (!r.hasDetector) { <span class="badge text-bg-warning ms-1" title="No detector in this build: never fires">no detector</span> }</td>
-                  <td class="small font-monospace">{{ r.pattern.patternCode }}</td>
-                  <td class="small">{{ r.pattern.direction }}</td>
+                  <td>
+                    {{ r.pattern.patternName }} @if (!r.hasDetector) { <span class="badge text-bg-warning ms-1" title="No detector in this build: never fires">no detector</span> }
+                    <div class="small text-body-secondary d-sm-none">{{ r.pattern.direction }}</div>
+                  </td>
+                  <td class="small font-monospace d-none d-sm-table-cell">{{ r.pattern.patternCode }}</td>
+                  <td class="small d-none d-sm-table-cell">{{ r.pattern.direction }}</td>
                   <td class="num text-end">{{ r.pattern.defaultWeight }}</td>
-                  <td>{{ r.pattern.requireVolumeConfirm ? '✓' : '' }}</td>
-                  <td>{{ r.pattern.requireBreakoutClose ? '✓' : '' }}</td>
+                  <td class="d-none d-sm-table-cell">{{ r.pattern.requireVolumeConfirm ? '✓' : '' }}</td>
+                  <td class="d-none d-sm-table-cell">{{ r.pattern.requireBreakoutClose ? '✓' : '' }}</td>
                   <td><button type="button" class="btn btn-sm btn-link py-0" (click)="edit(r.pattern)">Edit</button></td>
                 </tr>
               }
