@@ -22,6 +22,8 @@ public sealed class AuthOptions
     /// <summary>base64 HMAC-SHA256 key, at least 32 bytes.</summary>
     public string? JwtKey { get; set; }
     public int TokenHours { get; set; } = 8;
+    /// <summary>Token lifetime when "Remember me" is ticked at sign-in.</summary>
+    public int RememberDays { get; set; } = 30;
     public string Issuer { get; set; } = "tradebot";
 
     public SymmetricSecurityKey SigningKey() =>
@@ -30,9 +32,10 @@ public sealed class AuthOptions
 
 public sealed class JwtIssuer(AuthOptions options, TimeProvider clock)
 {
-    public (string Token, DateTime ExpiresUtc) Issue(string user)
+    public (string Token, DateTime ExpiresUtc) Issue(string user, bool remember = false)
     {
-        var expires = clock.GetUtcNow().UtcDateTime.AddHours(options.TokenHours);
+        var now = clock.GetUtcNow().UtcDateTime;
+        var expires = remember ? now.AddDays(options.RememberDays) : now.AddHours(options.TokenHours);
         var token = new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
         {
             Issuer = options.Issuer,

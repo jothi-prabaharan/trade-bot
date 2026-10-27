@@ -19,6 +19,11 @@ import { AuthService } from '../../core/auth';
         <input id="username" name="username" class="form-control mb-3" autocomplete="username" required [(ngModel)]="username" />
         <label class="form-label" for="password">Password</label>
         <input id="password" name="password" type="password" class="form-control mb-3" autocomplete="current-password" required [(ngModel)]="password" />
+        <div class="form-check mb-3">
+          <input id="remember" name="remember" type="checkbox" class="form-check-input" [(ngModel)]="remember" aria-describedby="remember-hint" />
+          <label class="form-check-label" for="remember">Remember me</label>
+          <div id="remember-hint" class="form-text">Stay signed in on this browser after it closes. Don't tick on a shared computer.</div>
+        </div>
         @if (error()) { <div class="alert alert-danger py-2" role="alert">{{ error() }}</div> }
         <button type="submit" class="btn btn-success w-100" [disabled]="busy() || !f.valid">
           <fa-icon [icon]="icons.go" class="me-2" />{{ busy() ? 'Signing in…' : 'Sign in' }}
@@ -36,12 +41,13 @@ export class Login {
   protected readonly error = signal<string | null>(null);
   protected username = 'admin';
   protected password = '';
+  protected remember = false;
 
   protected async submit(): Promise<void> {
     this.busy.set(true);
     this.error.set(null);
     try {
-      this.auth.store(await firstValueFrom(this.api.login(this.username, this.password)));
+      this.auth.store(await firstValueFrom(this.api.login(this.username, this.password, this.remember)), this.remember);
       await this.router.navigate(['/']);
     } catch (e) {
       this.error.set(apiErrorText(e));

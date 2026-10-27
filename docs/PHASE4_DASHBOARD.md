@@ -18,6 +18,12 @@ One page; every editor opens as an offcanvas drawer over it, so the trade book s
 
 ![Trade drawer](images/trade-drawer.png)
 
+### Sign-in
+- **Every tab shares the sign-in.** A new tab asks the open tabs for the session over a `BroadcastChannel` (up to 300 ms) and keeps it in its own `sessionStorage`; the session ends when the last tab closes, or after 8 hours.
+- **Remember me** (unticked by default) keeps the session in `localStorage` with a 30-day token, so it survives browser restarts. Don't tick it on a shared computer.
+- **Signing in or out in one tab applies to all of them**; opening `/login` while signed in goes to the dashboard.
+- **Lost device:** `sudo tradebotctl sign-out-all` rotates the signing key and ends every session, remembered ones included. `set-admin-password` does the same.
+
 ## 2. Live data
 `DashboardStore` (signals) owns all live state:
 - `/ws/dashboard?access_token=…&scope=…` pushes `{"type":"overview"}` (only when it changed, ≤ 1/s) and `{"type":"events"}` batches of new `trn.system_events`.

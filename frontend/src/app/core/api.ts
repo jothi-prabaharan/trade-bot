@@ -13,8 +13,8 @@ type Body = Record<string, unknown>;
 export class ApiService {
   private readonly http = inject(HttpClient);
 
-  login(username: string, password: string): Observable<LoginResponse> {
-    return this.http.post<LoginResponse>('/api/auth/login', { username, password });
+  login(username: string, password: string, remember: boolean): Observable<LoginResponse> {
+    return this.http.post<LoginResponse>('/api/auth/login', { username, password, remember });
   }
 
   rules(): Observable<ValidationRulesDocument> { return this.http.get<ValidationRulesDocument>('/api/validation/rules'); }

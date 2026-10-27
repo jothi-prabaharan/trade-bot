@@ -77,7 +77,7 @@ PAPER and REAL share this engine. Only the gateway differs:
 ## 7. API (`/api`, JWT bearer; `POST /api/auth/login` 5/min, mutations 60/min)
 | Area | Endpoints |
 |---|---|
-| Auth | `POST auth/login` |
+| Auth | `POST auth/login` (`{ username, password, remember }`: `Auth:TokenHours` token, or `Auth:RememberDays` when `remember`) |
 | Dashboard | `GET dashboard/overview?scope=all\|real\|paper\|{accountId}`, WebSocket `/ws/dashboard?access_token=` (pushes on change, 1 s) |
 | Bot | `GET bot/status`, `POST bot/kill-switch` |
 | Accounts | `GET/POST accounts`, `GET/PUT accounts/{id}`, `POST accounts/{id}/mode` (typed client-id confirmation), `GET accounts/{id}/auth/login-url`, `POST accounts/{id}/auth/request-token`, `POST accounts/{id}/auth/login`, `POST accounts/{id}/kill-switch` |
@@ -104,7 +104,7 @@ Secrets (`[Encrypted]`) are write-only. They are stored as `v1:` AES-GCM ciphert
 |---|---|---|
 | `ConnectionStrings:TradeBot` (or `TRADEBOT_DB`) | all | Npgsql connection string |
 | `Security:MasterKey` (or `TRADEBOT_MASTER_KEY`) | all | base64 32-byte AES key for `[Encrypted]` columns |
-| `Auth:AdminUser`, `Auth:AdminPasswordHash`, `Auth:JwtKey`, `Auth:TokenHours` | API | hash via `dotnet TradeBot.Api.dll hash-password`; JwtKey base64 ≥ 32 bytes |
+| `Auth:AdminUser`, `Auth:AdminPasswordHash`, `Auth:JwtKey`, `Auth:TokenHours` (8), `Auth:RememberDays` (30) | API | hash via `dotnet TradeBot.Api.dll hash-password`; JwtKey base64 ≥ 32 bytes (a new key signs everyone out) |
 | `Engine:Enabled`, `Database:MigrateOnStartup`, `Cors:Origins` | API | |
 | `PaytmMoney:*` | API, Auth | `OrderSource`, `SecurityMasterFile`, `StrikeDivisor`, `MaxSubscriptionsPerConnection`, `PriceChartIntervals` |
 | `BrokerLogin:*` | Auth | `ChromiumExecutablePath`, `Headless`, timeouts, data-driven `Steps`, failure screenshots |

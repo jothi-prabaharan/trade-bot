@@ -1,21 +1,24 @@
-import { Locator, Page, expect, test } from '@playwright/test';
+import { BrowserContext, Locator, Page, expect, test } from '@playwright/test';
 import pg from 'pg';
 import { ADMIN_PASSWORD, dbConfig } from './env.mjs';
 
-// One signed-in page for the whole run: the login endpoint allows 5 attempts a minute.
+// One signed-in page for the whole run: the login endpoint allows 5 attempts a minute (this file makes 4).
 test.describe.configure({ mode: 'serial' });
 
+let context: BrowserContext;
 let page: Page;
 const card = (name: string): Locator => page.locator(`section[aria-label="${name}"]`);
 const field = (drawer: Locator, label: string): Locator => drawer.locator('tb-rule-field', { hasText: label }).locator('input, select, textarea').first();
 const drawer = (title: string): Locator => page.locator('.offcanvas', { has: page.locator('.offcanvas-title', { hasText: title }) });
 const toast = (title: string): Locator => page.locator('.toast', { hasText: title });
 
+// A real context, so later tests can open a second tab next to this one
 test.beforeAll(async ({ browser }) => {
-  page = await browser.newPage();
+  context = await browser.newContext();
+  page = await context.newPage();
 });
 test.afterAll(async () => {
-  await page.close();
+  await context.close();
 });
 
 test('rejects a wrong password, then signs in', async () => {
@@ -198,4 +201,46 @@ test('global kill switch needs KILL and a reason, then halts trading', async () 
   await expect(toast('Kill switch sent')).toBeVisible();
   await expect(page.getByRole('alert').filter({ hasText: 'Trading halted.' })).toContainText('e2e drill');
   await expect(page.getByRole('button', { name: 'Halted' })).toBeDisabled();
+});
+
+test('a new tab is already signed in; signing out there signs out every tab', async () => {
+  const second = await context.newPage();
+  await second.goto('/');
+  await expect(second.getByTestId('net-pnl')).toBeVisible();
+  await expect(second).toHaveURL(/\/$/);
+  // The login page sends a signed-in tab to the dashboard
+  await second.goto('/login');
+  await expect(second).toHaveURL(/\/$/);
+
+  await second.getByRole('button', { name: 'Sign out' }).click();
+  await expect(second).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/login$/);
+  await second.close();
+});
+
+test('"Remember me" survives closing every tab; a plain sign-in does not', async ({ browser }) => {
+  const own = await browser.newContext();
+  const signIn = async (remember: boolean) => {
+    const tab = await own.newPage();
+    await tab.goto('/login');
+    await tab.getByLabel('Password').fill(ADMIN_PASSWORD);
+    if (remember) await tab.getByLabel('Remember me').check();
+    await tab.getByRole('button', { name: 'Sign in' }).click();
+    await expect(tab.getByTestId('net-pnl')).toBeVisible();
+    await tab.close();
+  };
+
+  await signIn(false);
+  const fresh = await own.newPage();
+  await fresh.goto('/');
+  await expect(fresh).toHaveURL(/\/login$/);
+  await fresh.close();
+
+  await signIn(true);
+  const later = await own.newPage();
+  await later.goto('/');
+  await expect(later.getByTestId('net-pnl')).toBeVisible();
+  await later.reload();
+  await expect(later).toHaveURL(/\/$/);
+  await own.close();
 });

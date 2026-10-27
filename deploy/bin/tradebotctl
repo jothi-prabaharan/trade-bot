@@ -7,7 +7,8 @@
 #   tradebotctl restart [--force]            restart api, news and auth
 #   tradebotctl backup                       pg_dump -n mst -n trn now
 #   tradebotctl restore <file.dump> [--into-production [--force]]
-#   tradebotctl set-admin-password           bcrypt-hash a new dashboard password and restart the API
+#   tradebotctl set-admin-password           bcrypt-hash a new dashboard password, sign out every browser, restart the API
+#   tradebotctl sign-out-all [--force]       end every dashboard session ("Remember me" included) and restart the API
 #   tradebotctl allow-ip list|add <ip/cidr>|remove <ip/cidr>
 #   tradebotctl seed [--stocks f.csv] [--holidays f.csv]   re-import F&O universe / holidays (defaults: bundled files)
 #   tradebotctl migrate                      apply database migrations with the current release
@@ -24,6 +25,8 @@ load_conf
 
 api_cli() { run_as_service /usr/bin/dotnet "$TRADEBOT_CURRENT/api/TradeBot.Api.dll" "$@"; }
 guard() { if [ "${1:-}" != "--force" ] && market_hours; then die "Market hours (09:00–15:35 IST). Add --force to proceed anyway."; fi; }
+# A new signing key invalidates every dashboard token already issued
+rotate_jwt_key() { sed -i "s|^Auth__JwtKey=.*|Auth__JwtKey='$(openssl rand -base64 48)'|" "$TRADEBOT_ENV_FILE"; }
 set_conf() {  # set_conf KEY VALUE (single-quoted in install.conf)
   local key=$1 value=$2
   if grep -q "^$key=" "$TRADEBOT_CONF_FILE"; then sed -i "s|^$key=.*|$key=\"$value\"|" "$TRADEBOT_CONF_FILE"
@@ -88,8 +91,15 @@ case $cmd in
     [[ $hash == \$2* ]] || die "Hashing failed: $hash"
     escaped=$(printf '%s' "$hash" | sed 's/[&|]/\\&/g')
     sed -i "s|^Auth__AdminPasswordHash=.*|Auth__AdminPasswordHash='$escaped'|" "$TRADEBOT_ENV_FILE"
+    rotate_jwt_key
     systemctl restart tradebot-api
-    wait_healthy 120 && log "Admin password updated (user: $(sed -n "s/^Auth__AdminUser='\(.*\)'/\1/p" "$TRADEBOT_ENV_FILE"))."
+    wait_healthy 120 && log "Admin password updated (user: $(sed -n "s/^Auth__AdminUser='\(.*\)'/\1/p" "$TRADEBOT_ENV_FILE")); every browser must sign in again."
+    ;;
+  sign-out-all)
+    guard "${1:-}"
+    rotate_jwt_key
+    systemctl restart tradebot-api
+    wait_healthy 120 && log "Every dashboard session is signed out, remembered ones included."
     ;;
   allow-ip)
     action=${1:-list} ip=${2:-}

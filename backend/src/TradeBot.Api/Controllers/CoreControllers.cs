@@ -14,7 +14,7 @@ namespace TradeBot.Api.Controllers;
 [ApiController, Route("api/auth")]
 public sealed class AuthController(AuthOptions options, JwtIssuer jwt) : ControllerBase
 {
-    public sealed record LoginRequest(string Username, string Password);
+    public sealed record LoginRequest(string Username, string Password, bool Remember = false);
 
     [HttpPost("login"), AllowAnonymous, EnableRateLimiting("login")]
     public IActionResult Login(LoginRequest request)
@@ -24,7 +24,7 @@ public sealed class AuthController(AuthOptions options, JwtIssuer jwt) : Control
         try { passOk = options.AdminPasswordHash is { } hash && BCrypt.Net.BCrypt.Verify(request.Password ?? "", hash); }
         catch (BCrypt.Net.SaltParseException) { /* misconfigured hash: treat as failure */ }
         if (!(userOk & passOk)) return Unauthorized(new { errors = new[] { new ApiError("AUTH_INVALID", "Invalid username or password.") } });
-        var (token, expires) = jwt.Issue(options.AdminUser);
+        var (token, expires) = jwt.Issue(options.AdminUser, request.Remember);
         return Ok(new { token, expiresAtUtc = expires, user = options.AdminUser });
     }
 }

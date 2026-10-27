@@ -73,11 +73,12 @@ Internet ──443──> nginx (TLS, IP allowlist, CSP, rate limits)
 | Roll back to the previous release | `sudo tradebotctl rollback` |
 | Restart services | `sudo tradebotctl restart` |
 | Allow / remove an IP | `sudo tradebotctl allow-ip add 198.51.100.7` · `remove …` · `list` |
+| Sign out every browser ("Remember me" included), e.g. after losing a device | `sudo tradebotctl sign-out-all` (also happens on `set-admin-password`) |
 | Backup now | `sudo tradebotctl backup` |
 | Re-import F&O universe / weights / holidays | `sudo tradebotctl seed` (bundled files) or `--stocks my.csv --holidays my.csv` |
 | Renew/enable TLS manually | `sudo tradebotctl tls` (certbot.timer renews automatically) |
 
-**Market-hours guard.** `deploy`, `rollback`, `restart` and a production restore refuse to run on trading days between 09:00 and 15:35 IST (holidays from `mst.market_holidays`), unless you pass `--force`. The engine recovers open brackets from `trn.*` after a restart, but a mid-session restart still drops ticks and pauses the stop-loss/target engine for a few seconds.
+**Market-hours guard.** `deploy`, `rollback`, `restart`, `sign-out-all` and a production restore refuse to run on trading days between 09:00 and 15:35 IST (holidays from `mst.market_holidays`), unless you pass `--force`. The engine recovers open brackets from `trn.*` after a restart, but a mid-session restart still drops ticks and pauses the stop-loss/target engine for a few seconds.
 
 **How `deploy.sh` runs:**
 1. Fetches `main` and publishes the API and both workers (`-c Release`; only the auth worker carries Playwright's driver).

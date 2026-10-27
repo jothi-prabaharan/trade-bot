@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
 using System.Text;
@@ -30,6 +31,27 @@ public class ApiSmokeTests(ApiFactory api)
         var r = await api.CreateClient().PostAsJsonAsync("/api/auth/login", new { username = "admin", password = "nope" });
         Assert.Equal(HttpStatusCode.Unauthorized, r.StatusCode);
         Assert.Equal("AUTH_INVALID", (await r.Content.ReadFromJsonAsync<JsonObject>())!["errors"]![0]!["code"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Remember_me_issues_a_30_day_token_instead_of_8_hours()
+    {
+        async Task<(string Token, DateTime Expires)> Login(bool remember)
+        {
+            var r = await api.CreateClient().PostAsJsonAsync("/api/auth/login", new { username = "admin", password = ApiFactory.AdminPassword, remember });
+            r.EnsureSuccessStatusCode();
+            var body = (await r.Content.ReadFromJsonAsync<JsonObject>())!;
+            return (body["token"]!.GetValue<string>(), body["expiresAtUtc"]!.GetValue<DateTime>());
+        }
+
+        var session = await Login(remember: false);
+        Assert.InRange(session.Expires - DateTime.UtcNow, TimeSpan.FromHours(7.9), TimeSpan.FromHours(8));
+        var remembered = await Login(remember: true);
+        Assert.InRange(remembered.Expires - DateTime.UtcNow, TimeSpan.FromDays(29.99), TimeSpan.FromDays(30));
+
+        var client = api.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", remembered.Token);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/accounts")).StatusCode);
     }
 
     [Fact]
