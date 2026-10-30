@@ -359,6 +359,26 @@ test('Paytm drawer: setup checklist, TOTP compared with an authenticator, and th
   // No token today: the check says so instead of calling Paytm
   await d.getByRole('button', { name: 'Check connection' }).click();
   await expect(d.getByTestId('paytm-connection')).toContainText('NO_TOKEN');
+
+  // Layout: no label sharing a line with the button before it ("Open Paytm login" + "requestToken"), no sideways scroll
+  const layoutIssues = () => d.evaluate((root) => {
+    const issues: string[] = [];
+    for (const label of Array.from(root.querySelectorAll('label'))) {
+      const l = label.getBoundingClientRect();
+      for (const button of Array.from(root.querySelectorAll('button'))) {
+        const b = button.getBoundingClientRect();
+        if (l.width && b.width && l.top < b.bottom - 2 && l.bottom > b.top + 2 && l.left >= b.right - 1 && l.left - b.right < 40)
+          issues.push(`label "${label.textContent!.trim()}" beside "${button.textContent!.trim()}"`);
+      }
+    }
+    const body = root.querySelector('.offcanvas-body')!;
+    if (body.scrollWidth > body.clientWidth) issues.push('drawer scrolls sideways');
+    return issues;
+  });
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: width < 768 ? 844 : 1000 });
+    await expect.poll(layoutIssues, { message: `layout at ${width}px` }).toEqual([]);
+  }
   await page.keyboard.press('Escape');
   await expect(d).toBeHidden();
 });
