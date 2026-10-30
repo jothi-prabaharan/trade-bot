@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import {
   AccountDto, ApiError, BrokerConnectionCheck, BrokerSetupReport, Candle, ChartPattern, DashboardOverview, GeminiConfigResponse, InstrumentDto,
   LoginResponse, MarketHoliday, NewsItem, PatternRow, PnlCurve, PushAlertKinds, PushDeliveryResult, PushDevice, RiskConfig, Scope, Sentiment, Signal,
-  StrategyConfig, SystemEvent, TotpComparison, TradeDetail,
+  StrategyConfig, SystemEvent, TotpCode, TotpComparison, TradeDetail,
 } from './models';
 import { ValidationRulesDocument } from './validation/rules';
 
@@ -30,7 +30,10 @@ export class ApiService {
   setMode(id: number, targetMode: string, confirmClientId: string | null): Observable<AccountDto> {
     return this.http.post<AccountDto>(`/api/accounts/${id}/mode`, { targetMode, confirmClientId });
   }
-  loginUrl(id: number): Observable<{ url: string }> { return this.http.get<{ url: string }>(`/api/accounts/${id}/auth/login-url`); }
+  /** Paytm's login page for the account; `nonce` comes back in Paytm's state so this browser knows the returning token is its own. */
+  loginUrl(id: number, nonce?: string): Observable<{ url: string }> {
+    return this.http.get<{ url: string }>(`/api/accounts/${id}/auth/login-url`, { params: nonce ? { nonce } : {} });
+  }
   exchangeRequestToken(id: number, requestToken: string): Observable<{ tokenExpiry: string; connection: BrokerConnectionCheck | null }> {
     return this.http.post<{ tokenExpiry: string; connection: BrokerConnectionCheck | null }>(`/api/accounts/${id}/auth/request-token`, { requestToken });
   }
@@ -38,6 +41,8 @@ export class ApiService {
   checkConnection(id: number): Observable<BrokerConnectionCheck> { return this.http.post<BrokerConnectionCheck>(`/api/accounts/${id}/auth/check`, {}); }
   brokerSetup(id: number): Observable<BrokerSetupReport> { return this.http.get<BrokerSetupReport>(`/api/accounts/${id}/auth/setup`); }
   totpCheck(id: number, code: string): Observable<TotpComparison> { return this.http.post<TotpComparison>(`/api/accounts/${id}/auth/totp-check`, { code }); }
+  /** The bot's current TOTP code (it is the account's authenticator); each view is logged. */
+  totpCode(id: number): Observable<TotpCode> { return this.http.post<TotpCode>(`/api/accounts/${id}/auth/totp-code`, {}); }
   submitOtp(id: number, otp: string): Observable<void> { return this.http.post<void>(`/api/accounts/${id}/auth/otp`, { otp }); }
   triggerLogin(id: number): Observable<void> { return this.http.post<void>(`/api/accounts/${id}/auth/login`, {}); }
   accountKill(id: number, reason: string): Observable<void> { return this.http.post<void>(`/api/accounts/${id}/kill-switch`, { reason }); }

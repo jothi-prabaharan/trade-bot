@@ -1,11 +1,11 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
 import { faRightToBracket } from '@fortawesome/free-solid-svg-icons';
 import { firstValueFrom } from 'rxjs';
 import { ApiService, apiErrorText } from '../../core/api';
-import { AuthService } from '../../core/auth';
+import { AuthService, afterSignIn } from '../../core/auth';
 
 @Component({
   selector: 'tb-login',
@@ -36,6 +36,7 @@ export class Login {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   protected readonly icons = { go: faRightToBracket };
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -48,7 +49,7 @@ export class Login {
     this.error.set(null);
     try {
       this.auth.store(await firstValueFrom(this.api.login(this.username, this.password, this.remember)), this.remember);
-      await this.router.navigate(['/']);
+      await this.router.navigateByUrl(afterSignIn(this.route.snapshot.queryParamMap.get('returnUrl')));
     } catch (e) {
       this.error.set(apiErrorText(e));
     } finally {

@@ -1,5 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import { DashboardStore } from '../../core/dashboard-store';
+import { PaytmReturn, parsePaytmRedirect } from '../../core/paytm-return';
 import { RulesService } from '../../core/validation/forms';
 import { AccountDrawer } from '../config/account-drawer';
 import { HolidaysDrawer, PatternsDrawer } from '../config/catalog-drawers';
@@ -55,5 +57,12 @@ export class Dashboard {
   constructor() {
     this.store.start();
     void inject(RulesService).load().catch(() => undefined);
+
+    // Paytm's redirect URL is this page: use the requestToken it brought, then drop it from the address bar
+    const redirect = parsePaytmRedirect(inject(ActivatedRoute).snapshot.queryParamMap);
+    if (redirect) {
+      void inject(Router).navigate([], { queryParams: {}, replaceUrl: true });
+      void inject(PaytmReturn).handle(redirect);
+    }
   }
 }

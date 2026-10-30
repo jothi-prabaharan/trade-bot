@@ -161,8 +161,9 @@ export class AccountCards {
 
   protected token(s: TokenStatus) { return TOKEN_BADGE[s]; }
 
+  /** The server marks accounts the auth worker leaves alone NOT_REQUIRED; any other missing or bad token offers a login. */
   protected needsLogin(c: AccountCard): boolean {
-    return (c.mode === 'REAL' || c.isDataProvider) && ['MISSING', 'FAILED', 'EXPIRED', 'EXPIRING', 'REJECTED'].includes(c.tokenStatus);
+    return ['MISSING', 'FAILED', 'EXPIRED', 'EXPIRING', 'REJECTED'].includes(c.tokenStatus);
   }
 
   /** Accounts that log in to Paytm (REAL, the market-data provider, or any with an API key saved). */

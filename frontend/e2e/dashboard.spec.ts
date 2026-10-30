@@ -328,7 +328,7 @@ test('account selector: visible on phones too, filters cards, trades and events,
   await expect(card('Paper Alpha')).toBeVisible();
 });
 
-test('Paytm drawer: setup checklist, TOTP compared with an authenticator, and the user-details check', async () => {
+test('Paytm drawer: setup checklist, the bot as authenticator, automatic login, and the user-details check', async () => {
   // Keys pasted with stray spaces, the TOTP secret the way authenticator apps show it
   await card('Real Primary').getByRole('button', { name: 'Profile' }).click();
   const profile = drawer('Edit account');
@@ -356,6 +356,18 @@ test('Paytm drawer: setup checklist, TOTP compared with an authenticator, and th
   await d.getByRole('button', { name: 'Compare' }).click();
   await expect(d.getByTestId('totp-result')).toContainText('Does not match');
 
+  // The bot is the authenticator: Show code gives the code an authenticator app computes from the same secret
+  await d.getByRole('button', { name: 'Show code' }).click();
+  const shown = (await d.getByLabel('Current TOTP code').textContent())!.replace(/\s/g, '');
+  expect([-30_000, 0, 30_000].map((ms) => totp('JBSWY3DPEHPK3PXP', Date.now() + ms))).toContain(shown);
+  await expect(d.getByTestId('totp-code')).toContainText('s left');
+  await d.getByRole('button', { name: 'Hide' }).click();
+  await expect(d.getByTestId('totp-code')).toBeHidden();
+
+  // When the bot logs in by itself, and what it still needs (no login password saved for this account)
+  await expect(d.getByTestId('paytm-auto-login')).toContainText('08:45 IST');
+  await expect(d.getByTestId('paytm-auto-login')).toContainText('login password');
+
   // No token today: the check says so instead of calling Paytm
   await d.getByRole('button', { name: 'Check connection' }).click();
   await expect(d.getByTestId('paytm-connection')).toContainText('NO_TOKEN');
@@ -381,6 +393,57 @@ test('Paytm drawer: setup checklist, TOTP compared with an authenticator, and th
   }
   await page.keyboard.press('Escape');
   await expect(d).toBeHidden();
+});
+
+test('Paytm return: the dashboard uses the token from its own login, and holds any other for Use token', async () => {
+  const sent: string[] = [];
+  const route = '**/api/accounts/*/auth/request-token';
+  await page.route(route, async (r) => {
+    sent.push((r.request().postDataJSON() as { requestToken: string }).requestToken);
+    await r.fulfill({
+      json: {
+        tokenExpiry: new Date(Date.now() + 8 * 3_600_000).toISOString(),
+        connection: {
+          accountId: 1, ok: true, tokenRejected: false, checkedAtUtc: new Date().toISOString(), clientId: 'PM12345', name: 'Asha Trader',
+          email: null, phone: null, clientIdMatches: true, tokenExpiryUtc: null, errorCode: null, error: null, clockSkewSeconds: null,
+        },
+      },
+    });
+  });
+  // Paytm's login page itself is not part of this test
+  await context.route('https://login.paytmmoney.com/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>Paytm Money</title>' }));
+
+  await card('Real Primary').getByRole('button', { name: 'Paytm', exact: true }).click();
+  const popup = context.waitForEvent('page');
+  await drawer('Paytm connection').getByRole('button', { name: 'Open Paytm login' }).click();
+  const paytm = await popup;
+  await paytm.waitForURL(/login\.paytmmoney\.com/);
+  const state = new URL(paytm.url()).searchParams.get('state')!;
+  expect(state).toMatch(/^tb\d+z[0-9a-f]{32}$/);
+  await paytm.close();
+  await page.keyboard.press('Escape');
+
+  // Paytm sends the browser back to the redirect URL, the dashboard, which saves the login and clears the address bar
+  await page.goto(`/?success=true&requestToken=e2e-req-1&state=${state}`);
+  await expect(toast('Paytm login saved')).toContainText('Asha Trader');
+  expect(sent).toEqual(['e2e-req-1']);
+  await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/$/);
+
+  // A link this browser did not start: the token waits in the drawer and nothing is sent until Use token
+  const accountId = /^tb(\d+)/.exec(state)![1];
+  await page.goto(`/?success=true&requestToken=e2e-req-2&state=tb${accountId}`);
+  const held = drawer('Paytm connection');
+  await expect(held.getByTestId('paytm-return-note')).toContainText('not started from this browser');
+  await expect(held.locator('#tb-request-token')).toHaveValue('e2e-req-2');
+  expect(sent).toEqual(['e2e-req-1']);
+  await held.getByRole('button', { name: 'Use token' }).click();
+  await expect(toast('Broker token saved')).toBeVisible();
+  expect(sent).toEqual(['e2e-req-1', 'e2e-req-2']);
+
+  await page.unroute(route);
+  await context.unroute('https://login.paytmmoney.com/**');
+  await page.keyboard.press('Escape');
+  await expect(held).toBeHidden();
 });
 
 test('theme toggle is remembered across reloads', async () => {

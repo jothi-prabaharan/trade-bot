@@ -2,16 +2,22 @@ using Microsoft.Extensions.Logging;
 using TradeBot.Application.Abstractions;
 using TradeBot.Application.Engine;
 using TradeBot.Application.Security;
+using TradeBot.Application.Validation;
 using TradeBot.Domain.Entities.Mst;
 using TradeBot.Domain.Entities.Trn;
 using TradeBot.Domain.Enums;
 
 namespace TradeBot.Application.Auth;
 
+/// <summary>How a login ended: <see cref="NeedsAttention"/> failures (wrong password, PIN or TOTP secret, an SMS OTP
+/// nobody entered, a page the bot does not know) are not tried again automatically, <see cref="Failed"/> ones are.</summary>
+public enum LoginOutcome { Skipped, Succeeded, Failed, NeedsAttention }
+
 /// <summary>
 /// Daily Paytm login per account: headless TOTP login → requestToken → access/public/read tokens, verified against
 /// GET /accounts/v1/user/details before they are stored in mst.account_auth_tokens. Retries, then records the failure
-/// and alerts with the manual login link. Errors are redacted before they are logged, stored or sent.
+/// and alerts (with the manual login link once no automatic retry is left). Errors are redacted before they are logged,
+/// stored or sent.
 /// </summary>
 public sealed class BrokerAuthService(
     IAccountRepository accounts, IConfigRepository configs, IPaytmMoneyClient paytm, IBrokerLoginAutomation browser,
@@ -20,12 +26,20 @@ public sealed class BrokerAuthService(
 {
     public static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(30);
 
-    /// <summary>Accounts that need broker tokens: REAL accounts and the market-data provider.</summary>
+    /// <summary>
+    /// Accounts the Auth worker logs in: REAL accounts and the market-data provider, and paper accounts whose headless
+    /// login is fully set up (the bot holds their TOTP secret, so the login runs unattended like a REAL account's).
+    /// </summary>
     public static bool NeedsLogin(TradingAccount a) =>
-        a.IsActive && (a.TradeMode == TradeMode.Real || a.IsDataProvider) && a.ApiKey is not null && a.ApiSecret is not null;
+        a.IsActive && a.ApiKey is not null && a.ApiSecret is not null && (a.TradeMode == TradeMode.Real || a.IsDataProvider || MissingFields(a).Count == 0);
 
     /// <summary>Why headless login cannot run for this account, or null when it has everything it needs.</summary>
-    public static string? MissingForHeadless(TradingAccount a)
+    public static string? MissingForHeadless(TradingAccount a) => MissingFields(a) is { Count: > 0 } missing
+        ? $"Headless login needs {string.Join(", ", missing)} in the account profile; nothing was sent to Paytm."
+        : null;
+
+    /// <summary>What the profile lacks for the headless login ("TOTP secret", "a clean API key (no spaces or quotes inside)").</summary>
+    public static IReadOnlyList<string> MissingFields(TradingAccount a)
     {
         var missing = new List<string>();
         // Surrounding spaces are trimmed when sent; spaces or quotes inside mean the value was pasted wrongly
@@ -40,8 +54,7 @@ public sealed class BrokerAuthService(
             try { if (Totp.Base32Decode(a.TotpSecret).Length < 10) missing.Add("a valid TOTP secret (too short)"); }
             catch (FormatException) { missing.Add("a valid TOTP secret (not Base32)"); }
         }
-        return missing.Count == 0 ? null
-            : $"Headless login needs {string.Join(", ", missing)} in the account profile; nothing was sent to Paytm.";
+        return missing;
     }
 
     public async Task LoginAllAsync(CancellationToken ct)
@@ -50,14 +63,16 @@ public sealed class BrokerAuthService(
             await LoginAsync(a.AccountId, ct);
     }
 
-    public async Task<bool> LoginAsync(long accountId, CancellationToken ct)
+    /// <param name="retryAtUtc">When the scheduler tries again by itself if this login fails for a reason a new attempt can fix.</param>
+    public async Task<LoginOutcome> LoginAsync(long accountId, CancellationToken ct, DateTime? retryAtUtc = null)
     {
-        if (await accounts.GetAsync(accountId, ct) is not { } account || !NeedsLogin(account)) return false;
+        if (await accounts.GetAsync(accountId, ct) is not { } account || !NeedsLogin(account)) return LoginOutcome.Skipped;
         var strategy = await configs.StrategyAsync(ct);
         var attempts = Math.Max(1, strategy.AuthMaxRetries + 1);
         var loginUrl = paytm.LoginUrl(account.ApiKey!, $"tb{accountId}");
         string? lastError = null;
         var tried = 0;
+        var outcome = LoginOutcome.Failed;
         // A drifting server clock makes Paytm reject the TOTP; say so up front rather than after a failed attempt
         var clockWarning = BrokerConnectionChecker.ClockWarning(await paytm.ProbeClockAsync(ct));
         if (clockWarning is not null) log.LogWarning("Account {Account}: {Warning}", accountId, clockWarning);
@@ -88,7 +103,7 @@ public sealed class BrokerAuthService(
                 }, ct);
                 if (check.ClientIdMatches == false) await WarnClientMismatchAsync(account, check, ct);
                 log.LogInformation("Account {Account} logged in (attempt {Attempt}); {Verified}", accountId, attempt, Verified(check));
-                return true;
+                return LoginOutcome.Succeeded;
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
@@ -97,7 +112,7 @@ public sealed class BrokerAuthService(
                 if (clockWarning is not null && e is BrokerLoginException && lastError.Contains("TOTP", StringComparison.Ordinal)) lastError += " " + clockWarning;
                 log.LogWarning("Login attempt {Attempt}/{Attempts} failed for account {Account} ({Type}): {Error}",
                     attempt, attempts, accountId, e.GetType().Name, lastError);
-                if (e is BrokerLoginException) break;
+                if (e is BrokerLoginException) { outcome = LoginOutcome.NeedsAttention; break; }
                 if (attempt < attempts) await Task.Delay(RetryDelay, clock, ct);
             }
         }
@@ -108,16 +123,18 @@ public sealed class BrokerAuthService(
             ErrorMessage = lastError is { Length: > 1000 } ? lastError[..1000] : lastError,
         }, ct);
         await bus.PublishAsync(EventChannels.TokensUpdated, accountId.ToString(), ct);
+        // A failure a new attempt can fix, with an automatic retry still to come: say when, not "log in manually"
+        var retry = outcome == LoginOutcome.Failed && retryAtUtc is { } at ? $"The bot tries again by itself at {FixedLimits.ToIst(at):HH:mm} IST." : null;
         await trading.AddEventAsync(new SystemEvent
         {
-            AccountId = accountId, EventType = "LOGIN_FAILED", Severity = EventSeverity.Critical,
-            Message = $"Paytm login failed for {account.AccountName} after {tried} attempt(s): {lastError}" is var m && m.Length > 1000 ? m[..1000] : m,
+            AccountId = accountId, EventType = "LOGIN_FAILED", Severity = retry is null ? EventSeverity.Critical : EventSeverity.Warning,
+            Message = $"Paytm login failed for {account.AccountName} after {tried} attempt(s): {lastError}{(retry is null ? "" : " " + retry)}" is var m && m.Length > 1000 ? m[..1000] : m,
         }, ct);
         await alerts.SendAsync(AlertKind.Critical,
             $"🔐 Paytm login failed for <b>{System.Net.WebUtility.HtmlEncode(account.AccountName)}</b> after {tried} attempt(s) (build {BuildInfo.Revision}): " +
             $"{System.Net.WebUtility.HtmlEncode(lastError ?? "")}\n" +
-            $"Log in manually: {loginUrl}\nThen paste the requestToken on the dashboard.", ct);
-        return false;
+            (retry ?? $"Log in manually: {loginUrl}\nThen paste the requestToken on the dashboard."), ct);
+        return outcome;
     }
 
     private const string PaytmUserDetails = "GET /accounts/v1/user/details";

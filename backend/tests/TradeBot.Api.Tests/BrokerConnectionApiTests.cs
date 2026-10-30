@@ -6,6 +6,7 @@ using TradeBot.Application.Abstractions;
 using TradeBot.Application.Engine;
 using TradeBot.Application.Security;
 using TradeBot.Domain.Entities.Mst;
+using TradeBot.Domain.Entities.Trn;
 using TradeBot.Domain.Enums;
 
 namespace TradeBot.Api.Tests;
@@ -108,6 +109,55 @@ public class BrokerConnectionApiTests(ApiFactory api)
             api.Paytm.Tokens = (_, _, _) => new BrokerTokens("access-jwt", "public-jwt", "read-jwt", null);
             api.Paytm.Profile = _ => new BrokerProfile("PM12345", "Asha Trader", "asha@example.in", "9876543210", "{}");
         }
+    }
+
+    [Fact]
+    public async Task Log_in_now_names_what_is_missing_instead_of_doing_nothing()
+    {
+        var client = await api.AuthorizedClientAsync();
+        var created = await client.PostAsJsonAsync("/api/accounts", new
+        {
+            accountName = "Broker No Totp", clientId = "PM-NOTOTP", userName = "Asha Trader", loginId = "9876543210",
+            apiKey = "live-key-0002", apiSecret = "live-secret-0002", loginPassword = "pw-123",
+        });
+        var noTotp = (await created.Content.ReadFromJsonAsync<JsonObject>())!["accountId"]!.GetValue<long>();
+        var refused = await client.PostAsync($"/api/accounts/{noTotp}/auth/login", null);
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Contains("TOTP secret", (await refused.Content.ReadFromJsonAsync<JsonObject>())!["errors"]![0]!["message"]!.GetValue<string>());
+
+        var (_, ready) = await AccountAsync("Broker Login Now", "PM-LOGINNOW");
+        Assert.Equal(HttpStatusCode.Accepted, (await client.PostAsync($"/api/accounts/{ready}/auth/login", null)).StatusCode);
+    }
+
+    [Fact]
+    public async Task The_bot_shows_its_totp_code_like_an_authenticator_app_and_logs_each_view()
+    {
+        var (client, id) = await AccountAsync("Broker Code", "PM-CODE");
+        var r = await client.PostAsync($"/api/accounts/{id}/auth/totp-code", null);
+        r.EnsureSuccessStatusCode();
+        Assert.Contains("no-store", r.Headers.CacheControl!.ToString());
+        var body = (await r.Content.ReadFromJsonAsync<JsonObject>())!;
+        var now = api.Clock.GetUtcNow().UtcDateTime;
+        var left = body["secondsRemaining"]!.GetValue<int>();
+        Assert.Equal(Application.Security.Totp.Compute(Totp, now), body["code"]!.GetValue<string>());
+        Assert.Equal(Application.Security.Totp.Compute(Totp, now.AddSeconds(left)), body["nextCode"]!.GetValue<string>());
+        await using (var db = await api.DbAsync())
+            Assert.True(await db.Set<SystemEvent>().AnyAsync(e => e.AccountId == id && e.EventType == "TOTP_CODE_SHOWN"));
+
+        var setup = (await client.GetFromJsonAsync<JsonObject>($"/api/accounts/{id}/auth/setup"))!["autoLogin"]!;
+        Assert.True(setup["enabled"]!.GetValue<bool>());
+        Assert.Contains("logs in by itself at 08:45 IST", setup["note"]!.GetValue<string>());
+        Assert.Equal("Tue 03 Nov, 08:45", setup["nextIst"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Login_url_carries_the_dashboards_nonce_in_state()
+    {
+        var (client, id) = await AccountAsync("Broker State", "PM-STATE");
+        var url = (await client.GetFromJsonAsync<JsonObject>($"/api/accounts/{id}/auth/login-url?nonce=0123456789abcdef"))!["url"]!.GetValue<string>();
+        Assert.EndsWith($"state=tb{id}z0123456789abcdef", url);
+        var plain = (await client.GetFromJsonAsync<JsonObject>($"/api/accounts/{id}/auth/login-url?nonce=..%2Fx"))!["url"]!.GetValue<string>();
+        Assert.EndsWith($"state=tb{id}", plain);
     }
 
     [Fact]

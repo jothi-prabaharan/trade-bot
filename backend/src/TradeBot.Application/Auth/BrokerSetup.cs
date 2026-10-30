@@ -1,6 +1,9 @@
+using System.Globalization;
 using TradeBot.Application.Abstractions;
 using TradeBot.Application.Security;
+using TradeBot.Application.Validation;
 using TradeBot.Domain.Entities.Mst;
+using TradeBot.Domain.Enums;
 
 namespace TradeBot.Application.Auth;
 
@@ -8,7 +11,13 @@ public sealed record SetupItem(string Key, string Label, bool Ok, bool Required,
 
 public sealed record BrokerSetupReport(
     long AccountId, IReadOnlyList<SetupItem> Items, DateTime ServerTimeUtc, string ServerTimeIst, double? ClockSkewSeconds, string? ClockWarning,
-    int TotpSecondsRemaining, BrokerConnectionCheck? LastConnection);
+    int TotpSecondsRemaining, BrokerConnectionCheck? LastConnection, AutoLoginStatus AutoLogin);
+
+/// <summary>Whether the Auth worker logs the account in by itself (TOTP from the saved secret), when next, and the latest login.</summary>
+public sealed record AutoLoginStatus(bool Enabled, string Note, DateTime? NextUtc, string? NextIst, LastLogin? Last);
+
+/// <summary>The latest row of mst.account_auth_tokens for the account (the error is stored redacted).</summary>
+public sealed record LastLogin(DateTime AtUtc, string AtIst, string Method, bool Ok, int Attempts, string? Error);
 
 /// <summary>MATCH, CLOCK_OFF, NO_MATCH, BAD_CODE, NO_SECRET or BAD_SECRET, with what it means.</summary>
 public sealed record TotpComparison(string Result, string Message, int? StepOffset, int SecondsRemaining);
@@ -57,6 +66,25 @@ public static class BrokerSetup
                 "Copy the secret from Paytm Money's TOTP setup again and save it in the profile.", null, left),
         };
     }
+
+    public static AutoLoginStatus AutoLogin(TradingAccount a, AccountAuthToken? latest, DateTime nowUtc, TimeOnly loginTime, MarketCalendar calendar)
+    {
+        var missing = BrokerAuthService.MissingFields(a);
+        var scheduled = BrokerAuthService.NeedsLogin(a);
+        var at = loginTime.ToString("HH:mm", CultureInfo.InvariantCulture);
+        var note = !a.IsActive ? "Not logged in automatically: the account is inactive."
+            : !scheduled ? $"Not logged in automatically: add {string.Join(", ", missing)} to the account profile."
+            : missing.Count > 0 ? $"Due a login every trading day at {at} IST, but the headless login needs {string.Join(", ", missing)} first. Until then, use the manual login below."
+            : $"The bot enters the TOTP from the saved secret and logs in by itself at {at} IST on trading days. If a login fails for a reason another try " +
+              $"can fix, it tries again {AuthScheduler.AutoRetryInterval.TotalMinutes:0} minutes later ({AuthScheduler.MaxAutoRounds} tries a day).";
+        var enabled = scheduled && missing.Count == 0;
+        var next = enabled ? AuthScheduler.NextDailyLoginUtc(nowUtc, loginTime, calendar) : null;
+        var last = latest is null ? null : new LastLogin(latest.CreatedAt, IstText(latest.CreatedAt), latest.LoginMethod.ToString().ToUpperInvariant(),
+            latest.LoginStatus == LoginStatus.Success, latest.AttemptCount, latest.ErrorMessage);
+        return new(enabled, note, next, next is { } n ? IstText(n) : null, last);
+    }
+
+    private static string IstText(DateTime utc) => FixedLimits.ToIst(utc).ToString("ddd dd MMM, HH:mm", CultureInfo.InvariantCulture);
 
     /// <summary>Checked as it will be sent to POST /accounts/v2/gettoken (<paramref name="wire"/> is the body field).</summary>
     private static SetupItem Credential(string key, string field, string wire, string? value, string okDetail) =>

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -106,12 +107,17 @@ public sealed class AccountController(
         return Ok(AccountDto.From((await accounts.GetAsync(id, ct))!));
     }
 
+    /// <param name="nonce">
+    /// The dashboard's own random value (16–32 hex characters). It rides in Paytm's state (tb{id}z{nonce}) and comes back
+    /// with the requestToken, so the page Paytm returns to can tell a login it started from a link someone else made.
+    /// </param>
     [HttpGet("{id:long}/auth/login-url")]
-    public async Task<IActionResult> LoginUrl(long id, CancellationToken ct)
+    public async Task<IActionResult> LoginUrl(long id, [FromQuery] string? nonce, CancellationToken ct)
     {
         if (await accounts.GetAsync(id, ct) is not { } a) return NotFound();
         if (a.ApiKey is null) return ApiResults.Invalid(RuleCodes.ApiCredentialsMissing, "Set the API key first.", "apiKey");
-        return Ok(new { url = paytm.LoginUrl(a.ApiKey, $"tb{id}") });
+        var state = nonce is not null && Regex.IsMatch(nonce, "^[0-9a-f]{16,32}$") ? $"tb{id}z{nonce}" : $"tb{id}";
+        return Ok(new { url = paytm.LoginUrl(a.ApiKey, state) });
     }
 
     public sealed record RequestTokenBody(string RequestToken);
@@ -163,23 +169,46 @@ public sealed class AccountController(
         if (await accounts.GetAsync(id, ct) is not { } a) return NotFound();
         var reading = await paytm.ProbeClockAsync(ct) ?? paytm.Clock;
         var now = clock.GetUtcNow().UtcDateTime;
+        var latest = (await accounts.LatestTokensAsync(ct)).GetValueOrDefault(id);
         return Ok(new BrokerSetupReport(id, BrokerSetup.Items(a), now, FixedLimits.ToIst(now).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
             reading is null ? null : Math.Round(reading.Skew.TotalSeconds, 1), BrokerConnectionChecker.ClockWarning(reading),
-            Totp.SecondsRemaining(now), connection.Last(id)));
+            Totp.SecondsRemaining(now), connection.Last(id), BrokerSetup.AutoLogin(a, latest, now, config.Strategy.AuthLoginTime, config.Calendar)));
     }
 
     public sealed record TotpCheckBody(string? Code);
 
-    /// <summary>Compares the server's TOTP with the code in the user's authenticator app; no code is ever sent back.</summary>
+    /// <summary>Compares the server's TOTP with the code in a phone authenticator app holding the same secret; no code is sent back.</summary>
     [HttpPost("{id:long}/auth/totp-check"), EnableRateLimiting("mutations")]
     public async Task<IActionResult> CheckTotp(long id, TotpCheckBody body, CancellationToken ct) =>
         await accounts.GetAsync(id, ct) is { } a ? Ok(BrokerSetup.CompareTotp(a, body.Code, clock.GetUtcNow().UtcDateTime)) : NotFound();
 
-    /// <summary>Asks the Auth worker to run the headless TOTP login now.</summary>
+    /// <summary>
+    /// The bot as the account's authenticator app: the current TOTP code and the next one, for Paytm's TOTP setup and the
+    /// owner's own Paytm logins. Never cached; each view is recorded in the event log.
+    /// </summary>
+    [HttpPost("{id:long}/auth/totp-code"), EnableRateLimiting("mutations")]
+    public async Task<IActionResult> TotpCode(long id, CancellationToken ct)
+    {
+        if (await accounts.GetAsync(id, ct) is not { } a) return NotFound();
+        if (BrokerSetup.TotpProblem(a.TotpSecret) is { } problem) return ApiResults.Invalid("TOTP_SECRET", problem, "totpSecret");
+        var now = clock.GetUtcNow().UtcDateTime;
+        var left = Totp.SecondsRemaining(now);
+        await trading.AddEventAsync(new Domain.Entities.Trn.SystemEvent
+        {
+            AccountId = id, EventType = "TOTP_CODE_SHOWN", Severity = EventSeverity.Info,
+            Message = $"{User.Identity?.Name ?? "admin"} viewed the TOTP code for {a.AccountName} on the dashboard",
+        }, ct);
+        Response.Headers.CacheControl = "no-store";
+        return Ok(new { code = Totp.Compute(a.TotpSecret!, now), secondsRemaining = left, nextCode = Totp.Compute(a.TotpSecret!, now.AddSeconds(left)) });
+    }
+
+    /// <summary>Asks the Auth worker to run the headless TOTP login now; refused with the reason when it cannot run.</summary>
     [HttpPost("{id:long}/auth/login"), EnableRateLimiting("mutations")]
     public async Task<IActionResult> TriggerLogin(long id, CancellationToken ct)
     {
-        if (await accounts.GetAsync(id, ct) is null) return NotFound();
+        if (await accounts.GetAsync(id, ct) is not { } a) return NotFound();
+        if (!a.IsActive) return ApiResults.Invalid("ACCOUNT_INACTIVE", $"{a.AccountName} is inactive: activate it before logging it in.");
+        if (BrokerAuthService.MissingForHeadless(a) is { } missing) return ApiResults.Invalid(RuleCodes.ApiCredentialsMissing, missing);
         await bus.PublishAsync(EventChannels.LoginRequested, id.ToString(), ct);
         return Accepted();
     }

@@ -47,8 +47,16 @@ export interface SetupItem { key: string; label: string; ok: boolean; required: 
 
 export interface BrokerSetupReport {
   accountId: number; items: SetupItem[]; serverTimeUtc: string; serverTimeIst: string; clockSkewSeconds: number | null; clockWarning: string | null;
-  totpSecondsRemaining: number; lastConnection: BrokerConnectionCheck | null;
+  totpSecondsRemaining: number; lastConnection: BrokerConnectionCheck | null; autoLogin: AutoLoginStatus;
 }
+
+/** Whether the auth worker logs the account in by itself with the saved TOTP, when next, and the latest login. */
+export interface AutoLoginStatus { enabled: boolean; note: string; nextUtc: string | null; nextIst: string | null; last: LastLogin | null }
+
+export interface LastLogin { atUtc: string; atIst: string; method: 'HEADLESS' | 'MANUAL'; ok: boolean; attempts: number; error: string | null }
+
+/** The bot as the account's authenticator app: the current code and the one after it. */
+export interface TotpCode { code: string; secondsRemaining: number; nextCode: string }
 
 export interface TotpComparison {
   result: 'MATCH' | 'CLOCK_OFF' | 'NO_MATCH' | 'BAD_CODE' | 'NO_SECRET' | 'BAD_SECRET'; message: string; stepOffset: number | null; secondsRemaining: number;

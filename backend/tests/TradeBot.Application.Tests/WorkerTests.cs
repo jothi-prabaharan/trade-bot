@@ -423,7 +423,14 @@ public sealed class AuthHarness
         Clock = clock;
         Accounts.On(nameof(IAccountRepository.ListAsync), _ => AccountList.Where(a => a.IsActive).ToList());
         Accounts.On(nameof(IAccountRepository.GetAsync), a => AccountList.FirstOrDefault(x => x.AccountId == (long)a[0]!));
-        Accounts.On(nameof(IAccountRepository.AddTokenAsync), a => { Tokens.Add((AccountAuthToken)a[0]!); return Task.CompletedTask; });
+        // Stamped like AuditTimestampsInterceptor does on insert
+        Accounts.On(nameof(IAccountRepository.AddTokenAsync), a =>
+        {
+            var t = (AccountAuthToken)a[0]!;
+            if (t.CreatedAt == default) t.CreatedAt = clock.GetUtcNow().UtcDateTime;
+            Tokens.Add(t);
+            return Task.CompletedTask;
+        });
         Accounts.On(nameof(IAccountRepository.LatestTokensAsync), _ =>
             Tokens.GroupBy(t => t.AccountId).ToDictionary(g => g.Key, g => g.Last()));
         Configs.On(nameof(IConfigRepository.StrategyAsync), _ => Strategy);
@@ -445,11 +452,14 @@ public sealed class AuthHarness
 public class BrokerAuthServiceTests
 {
     [Fact]
-    public void Only_real_or_data_provider_accounts_with_keys_need_login()
+    public void Real_provider_and_totp_ready_paper_accounts_need_login()
     {
         Assert.True(BrokerAuthService.NeedsLogin(WorkerFixture.Account(1)));
+        Assert.True(BrokerAuthService.NeedsLogin(WorkerFixture.Account(1, totp: null)));
         Assert.True(BrokerAuthService.NeedsLogin(WorkerFixture.Account(2, TradeMode.Paper, provider: true)));
-        Assert.False(BrokerAuthService.NeedsLogin(WorkerFixture.Account(3, TradeMode.Paper)));
+        // The bot holds a paper account's TOTP secret: it logs in unattended like a REAL account
+        Assert.True(BrokerAuthService.NeedsLogin(WorkerFixture.Account(3, TradeMode.Paper)));
+        Assert.False(BrokerAuthService.NeedsLogin(WorkerFixture.Account(3, TradeMode.Paper, totp: null)));
         Assert.False(BrokerAuthService.NeedsLogin(WorkerFixture.Account(4, keys: false)));
         Assert.False(BrokerAuthService.NeedsLogin(WorkerFixture.Account(5, active: false)));
     }
@@ -460,7 +470,7 @@ public class BrokerAuthServiceTests
         var h = new AuthHarness(WorkerFixture.ClockAt(WorkerFixture.Monday, 8, 45));
         h.AccountList.Add(WorkerFixture.Account(7));
 
-        Assert.True(await h.Service.LoginAsync(7, CancellationToken.None));
+        Assert.Equal(LoginOutcome.Succeeded, await h.Service.LoginAsync(7, CancellationToken.None));
 
         var t = Assert.Single(h.Tokens);
         Assert.Equal((LoginStatus.Success, "access", "public", "read", 1), (t.LoginStatus, t.XJwtToken, t.PublicAccessToken, t.ReadAccessToken, t.AttemptCount));
@@ -486,7 +496,7 @@ public class BrokerAuthServiceTests
         h.Paytm.On(nameof(IPaytmMoneyClient.GetProfileAsync), _ => Task.FromException<BrokerProfile>(
             new BrokerApiException("Paytm API returned 401.", 401, "PM_MERCHANT_AUTH_401669", "Invalid Token", "{}")));
 
-        Assert.False(await h.Service.LoginAsync(7, CancellationToken.None));
+        Assert.Equal(LoginOutcome.NeedsAttention, await h.Service.LoginAsync(7, CancellationToken.None));
         Assert.Single(h.LoggedIn);
         var t = Assert.Single(h.Tokens);
         Assert.Equal(LoginStatus.Failed, t.LoginStatus);
@@ -501,7 +511,7 @@ public class BrokerAuthServiceTests
         h.AccountList.Add(WorkerFixture.Account(7));
         h.Paytm.On(nameof(IPaytmMoneyClient.GetProfileAsync), _ => new BrokerProfile("C99", "Someone Else", null, null, "{}"));
 
-        Assert.True(await h.Service.LoginAsync(7, CancellationToken.None));
+        Assert.Equal(LoginOutcome.Succeeded, await h.Service.LoginAsync(7, CancellationToken.None));
         Assert.Equal(LoginStatus.Success, Assert.Single(h.Tokens).LoginStatus);
         Assert.Equal(new[] { "LOGIN_SUCCESS", "LOGIN_CLIENT_MISMATCH" }, h.EventTypes);
         Assert.Contains("client C99", (string)Assert.Single(h.Alerts.Calls(nameof(IAlertSender.SendAsync)))[1]!);
@@ -520,7 +530,7 @@ public class BrokerAuthServiceTests
             "Timeout 15000ms exceeded navigating to \"https://login.paytmmoney.com/merchant-login?apiKey=live-api-key-0001&state=tb7\" " +
             "secret live-api-secret-9999 {\"access_token\":\"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc\"}")));
 
-        Assert.False(await h.Service.LoginAsync(7, CancellationToken.None));
+        Assert.Equal(LoginOutcome.Failed, await h.Service.LoginAsync(7, CancellationToken.None));
         var stored = Assert.Single(h.Tokens).ErrorMessage!;
         foreach (var leak in new[] { "live-api-key-0001", "live-api-secret-9999", "eyJhbGciOiJIUzI1NiJ9" })
         {
@@ -539,7 +549,7 @@ public class BrokerAuthServiceTests
         h.Paytm.On(nameof(IPaytmMoneyClient.ProbeClockAsync), _ => new BrokerClockReading(TimeSpan.FromSeconds(42), DateTime.UtcNow));
         h.Browser.On(nameof(IBrokerLoginAutomation.GetRequestTokenAsync), _ => Task.FromException<string>(new BrokerLoginException("Paytm rejected the TOTP code.")));
 
-        Assert.False(await h.Service.LoginAsync(7, CancellationToken.None));
+        Assert.Equal(LoginOutcome.NeedsAttention, await h.Service.LoginAsync(7, CancellationToken.None));
         Assert.Contains("server clock is 42 s behind Paytm's", Assert.Single(h.Tokens).ErrorMessage);
     }
 
@@ -558,7 +568,7 @@ public class BrokerAuthServiceTests
             h.Clock.Advance(BrokerAuthService.RetryDelay);
         }
 
-        Assert.False(await login.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(LoginOutcome.Failed, await login.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.Equal(3, h.LoggedIn.Count);
         var t = Assert.Single(h.Tokens);
         Assert.Equal((LoginStatus.Failed, 3, "OTP field not found"), (t.LoginStatus, t.AttemptCount, t.ErrorMessage));
@@ -576,7 +586,7 @@ public class BrokerAuthServiceTests
         h.Strategy.AuthMaxRetries = 3;
         h.AccountList.Add(WorkerFixture.Account(7, totp: null));
 
-        Assert.False(await h.Service.LoginAsync(7, CancellationToken.None));
+        Assert.Equal(LoginOutcome.NeedsAttention, await h.Service.LoginAsync(7, CancellationToken.None));
         Assert.Empty(h.LoggedIn);
         Assert.Equal(1, Assert.Single(h.Tokens).AttemptCount);
     }
@@ -599,7 +609,7 @@ public class BrokerAuthServiceTests
         a.ApiSecret = apiSecret;
         h.AccountList.Add(a);
 
-        Assert.False(await h.Service.LoginAsync(7, CancellationToken.None));
+        Assert.Equal(LoginOutcome.NeedsAttention, await h.Service.LoginAsync(7, CancellationToken.None));
         Assert.Empty(h.LoggedIn);
         Assert.Contains(expected, Assert.Single(h.Tokens).ErrorMessage);
     }
@@ -612,7 +622,7 @@ public class BrokerAuthServiceTests
         h.AccountList.Add(WorkerFixture.Account(7));
         h.Browser.On(nameof(IBrokerLoginAutomation.GetRequestTokenAsync), _ => Task.FromException<string>(new BrokerLoginException("Paytm asked for the SMS OTP")));
 
-        Assert.False(await h.Service.LoginAsync(7, CancellationToken.None));
+        Assert.Equal(LoginOutcome.NeedsAttention, await h.Service.LoginAsync(7, CancellationToken.None));
         // One browser run, one OTP at most; the alert carries the reason and the manual link
         Assert.Single(h.LoggedIn);
         Assert.Equal(1, Assert.Single(h.Tokens).AttemptCount);
@@ -620,12 +630,41 @@ public class BrokerAuthServiceTests
     }
 
     [Fact]
-    public async Task Paper_account_is_not_logged_in()
+    public async Task Paper_account_without_a_totp_login_is_left_alone()
+    {
+        var h = new AuthHarness(WorkerFixture.ClockAt(WorkerFixture.Monday, 8, 45));
+        h.AccountList.Add(WorkerFixture.Account(7, TradeMode.Paper, totp: null));
+        Assert.Equal(LoginOutcome.Skipped, await h.Service.LoginAsync(7, CancellationToken.None));
+        Assert.Empty(h.Tokens);
+    }
+
+    [Fact]
+    public async Task Paper_account_with_its_totp_saved_logs_in_by_itself()
     {
         var h = new AuthHarness(WorkerFixture.ClockAt(WorkerFixture.Monday, 8, 45));
         h.AccountList.Add(WorkerFixture.Account(7, TradeMode.Paper));
-        Assert.False(await h.Service.LoginAsync(7, CancellationToken.None));
-        Assert.Empty(h.Tokens);
+        Assert.Equal(LoginOutcome.Succeeded, await h.Service.LoginAsync(7, CancellationToken.None));
+        Assert.Equal((LoginStatus.Success, LoginMethod.Headless), (Assert.Single(h.Tokens).LoginStatus, h.Tokens[0].LoginMethod));
+    }
+
+    [Fact]
+    public async Task A_failure_with_an_automatic_retry_ahead_says_when_instead_of_asking_for_a_manual_login()
+    {
+        var h = new AuthHarness(WorkerFixture.ClockAt(WorkerFixture.Monday, 8, 45));
+        h.AccountList.Add(WorkerFixture.Account(7));
+        h.Browser.On(nameof(IBrokerLoginAutomation.GetRequestTokenAsync), _ => Task.FromException<string>(new TimeoutException("page did not load")));
+
+        var retryAt = Ist.ToUtc(WorkerFixture.Monday, new TimeOnly(8, 55));
+        Assert.Equal(LoginOutcome.Failed, await h.Service.LoginAsync(7, CancellationToken.None, retryAt));
+        var alert = (string)Assert.Single(h.Alerts.Calls(nameof(IAlertSender.SendAsync)))[1]!;
+        Assert.Contains("tries again by itself at 08:55 IST", alert);
+        Assert.DoesNotContain("Log in manually", alert);
+        Assert.Equal(EventSeverity.Warning, ((SystemEvent)h.Trading.Calls(nameof(ITradingRepository.AddEventAsync)).Single()[0]!).Severity);
+
+        // A failure only a person can fix asks for one, retry or not
+        h.Browser.On(nameof(IBrokerLoginAutomation.GetRequestTokenAsync), _ => Task.FromException<string>(new BrokerLoginException("Paytm rejected the TOTP code.")));
+        Assert.Equal(LoginOutcome.NeedsAttention, await h.Service.LoginAsync(7, CancellationToken.None, retryAt));
+        Assert.Contains("Log in manually", (string)h.Alerts.Calls(nameof(IAlertSender.SendAsync))[^1][1]!);
     }
 }
 
@@ -644,11 +683,99 @@ public class AuthSchedulerTests
 
         clock.SetIst(WorkerFixture.Monday, 8, 45);
         await h.Scheduler.TickAsync(CancellationToken.None);
-        Assert.Equal(new[] { 1L, 2L }, h.LoggedIn);
+        Assert.Equal(new[] { 1L, 2L, 3L }, h.LoggedIn);
 
         clock.SetIst(WorkerFixture.Monday, 9, 0);
         await h.Scheduler.TickAsync(CancellationToken.None);
+        Assert.Equal(3, h.LoggedIn.Count);
+    }
+
+    [Fact]
+    public async Task A_failed_login_is_tried_again_by_itself_ten_minutes_apart_three_times_a_day()
+    {
+        var clock = WorkerFixture.ClockAt(WorkerFixture.Monday, 8, 45);
+        var h = new AuthHarness(clock);
+        h.AccountList.Add(WorkerFixture.Account(1));
+        var fail = true;
+        h.Browser.On(nameof(IBrokerLoginAutomation.GetRequestTokenAsync), _ => fail ? Task.FromException<string>(new TimeoutException("page did not load")) : Task.FromResult("req-token"));
+
+        async Task At(int hour, int minute) { clock.SetIst(WorkerFixture.Monday, hour, minute); await h.Scheduler.TickAsync(CancellationToken.None); }
+        await At(8, 45);
+        await At(8, 50);
+        Assert.Single(h.LoggedIn);
+        await At(8, 55);
+        await At(9, 5);
+        Assert.Equal(3, h.LoggedIn.Count);
+        // The third failure is the last automatic one: it asks for a manual login
+        Assert.Contains("Log in manually", (string)h.Alerts.Calls(nameof(IAlertSender.SendAsync))[^1][1]!);
+        Assert.Contains("tries again by itself at 09:05 IST", (string)h.Alerts.Calls(nameof(IAlertSender.SendAsync))[^2][1]!);
+        await At(9, 30);
+        Assert.Equal(3, h.LoggedIn.Count);
+
+        // Asked for on the dashboard: runs at once, whatever the count
+        fail = false;
+        h.Scheduler.Enqueue("1");
+        await At(9, 31);
+        Assert.Equal(4, h.LoggedIn.Count);
+        Assert.Equal(LoginStatus.Success, h.Tokens[^1].LoginStatus);
+
+        // A new day starts the count again
+        h.Tokens.Clear();
+        fail = true;
+        clock.SetIst(WorkerFixture.Monday.AddDays(1), 8, 45);
+        await h.Scheduler.TickAsync(CancellationToken.None);
+        Assert.Equal(5, h.LoggedIn.Count);
+    }
+
+    [Fact]
+    public async Task Failures_a_retry_cannot_fix_stop_the_automatic_logins_until_someone_asks()
+    {
+        var clock = WorkerFixture.ClockAt(WorkerFixture.Monday, 8, 45);
+        var h = new AuthHarness(clock);
+        h.AccountList.Add(WorkerFixture.Account(1));
+        h.Browser.On(nameof(IBrokerLoginAutomation.GetRequestTokenAsync), _ => Task.FromException<string>(new BrokerLoginException("Paytm rejected the login ID or password.")));
+
+        await h.Scheduler.TickAsync(CancellationToken.None);
+        clock.SetIst(WorkerFixture.Monday, 9, 0);
+        await h.Scheduler.TickAsync(CancellationToken.None);
+        clock.SetIst(WorkerFixture.Monday, 10, 0);
+        await h.Scheduler.TickAsync(CancellationToken.None);
+        Assert.Single(h.LoggedIn);
+
+        h.Scheduler.Enqueue("1");
+        await h.Scheduler.TickAsync(CancellationToken.None);
         Assert.Equal(2, h.LoggedIn.Count);
+    }
+
+    [Fact]
+    public async Task No_automatic_login_after_the_close_and_a_manual_token_counts()
+    {
+        var clock = WorkerFixture.ClockAt(WorkerFixture.Monday, 15, 30);
+        var h = new AuthHarness(clock);
+        h.AccountList.AddRange([WorkerFixture.Account(1), WorkerFixture.Account(2)]);
+        await h.Scheduler.TickAsync(CancellationToken.None);
+        Assert.Empty(h.LoggedIn);
+
+        clock.SetIst(WorkerFixture.Monday.AddDays(1), 9, 0);
+        h.Tokens.Add(new AccountAuthToken
+        {
+            AccountId = 2, LoginStatus = LoginStatus.Success, LoginMethod = LoginMethod.Manual, XJwtToken = "pasted",
+            CreatedAt = Ist.ToUtc(WorkerFixture.Monday.AddDays(1), new TimeOnly(8, 30)), TokenExpiry = Ist.ToUtc(WorkerFixture.Monday.AddDays(1), new TimeOnly(23, 59)),
+        });
+        await h.Scheduler.TickAsync(CancellationToken.None);
+        Assert.Equal(new[] { 1L }, h.LoggedIn);
+    }
+
+    [Fact]
+    public void Next_daily_login_skips_weekends_and_holidays()
+    {
+        var calendar = new TradeBot.Application.Validation.MarketCalendar([new MarketHoliday { HolidayDate = WorkerFixture.Monday, Description = "Holiday" }]);
+        var saturday = Ist.ToUtc(WorkerFixture.Saturday, new TimeOnly(0, 33));
+        // Saturday night: Monday is a holiday, so Tuesday 08:45
+        Assert.Equal(Ist.ToUtc(WorkerFixture.Monday.AddDays(1), new TimeOnly(8, 45)), AuthScheduler.NextDailyLoginUtc(saturday, new TimeOnly(8, 45), calendar));
+        // Before the login time on a trading day: the same day
+        var tuesday = Ist.ToUtc(WorkerFixture.Monday.AddDays(1), new TimeOnly(7, 0));
+        Assert.Equal(Ist.ToUtc(WorkerFixture.Monday.AddDays(1), new TimeOnly(8, 45)), AuthScheduler.NextDailyLoginUtc(tuesday, new TimeOnly(8, 45), calendar));
     }
 
     [Fact]

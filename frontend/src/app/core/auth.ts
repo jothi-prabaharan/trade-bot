@@ -81,7 +81,7 @@ export class AuthService {
         persist(m.session);
         this.session.set(m.session);
         this.answered?.();
-        if (this.router.url.startsWith('/login')) void this.router.navigate(['/']);
+        if (this.router.url.startsWith('/login')) void this.router.navigateByUrl(afterSignIn(this.router.parseUrl(this.router.url).queryParamMap.get('returnUrl')));
         break;
       case 'logout':
         persist(null);
@@ -142,17 +142,24 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   );
 };
 
-export const authGuard: CanActivateFn = async () => {
+/** Where to go after signing in: the page the sign-in interrupted (a path on this site), else the dashboard. */
+export function afterSignIn(returnUrl: string | null | undefined): string {
+  return returnUrl && /^\/(?![/\\])/.test(returnUrl) && !returnUrl.startsWith('/login') ? returnUrl : '/';
+}
+
+/** Signed-out visits go to the sign-in page, which brings them back (Paytm's redirect keeps its requestToken). */
+export const authGuard: CanActivateFn = async (_route, state) => {
   const auth = inject(AuthService);
   const router = inject(Router);
   await auth.whenReady();
-  return auth.isLoggedIn() ? true : router.createUrlTree(['/login']);
+  if (auth.isLoggedIn()) return true;
+  return router.createUrlTree(['/login'], state.url === '/' ? undefined : { queryParams: { returnUrl: state.url } });
 };
 
-/** The login page sends a tab that is already signed in (here or via another tab) to the dashboard. */
-export const guestGuard: CanActivateFn = async () => {
+/** The login page sends a tab that is already signed in (here or via another tab) on to where it was going. */
+export const guestGuard: CanActivateFn = async (route) => {
   const auth = inject(AuthService);
   const router = inject(Router);
   await auth.whenReady();
-  return auth.isLoggedIn() ? router.createUrlTree(['/']) : true;
+  return auth.isLoggedIn() ? router.parseUrl(afterSignIn(route.queryParamMap.get('returnUrl'))) : true;
 };

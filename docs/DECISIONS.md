@@ -61,7 +61,7 @@
 | Slippage buffer (REAL LMT) | 0.5%, rounded to tick size |
 | Product | Intraday (`I`) |
 | Session | Entries 09:15–14:45 IST; time square-off 15:15 IST |
-| Auth | 08:45 IST headless Playwright + TOTP from a saved per-account browser profile (a known device to Paytm); an SMS OTP (first login from the server) is typed in the account card's OTP box within 3 min. 3 retries for transient errors only (never once the login ID is sent and the page is unrecognised, nor on a rejected password/TOTP/PIN, unanswered OTP or missing credentials), then alert + manual token paste on dashboard. Tokens are verified with `GET /accounts/v1/user/details` before storing and every 10 min; Paytm error codes are logged with secrets redacted |
+| Auth | 08:45 IST headless Playwright + TOTP from a saved per-account browser profile (a known device to Paytm); an SMS OTP (first login from the server) is typed in the account card's OTP box within 3 min. 3 retries for transient errors only (never once the login ID is sent and the page is unrecognised, nor on a rejected password/TOTP/PIN, unanswered OTP or missing credentials), then alert + manual token paste on dashboard. Tokens are verified with `GET /accounts/v1/user/details` before storing and every 10 min; Paytm error codes are logged with secrets redacted. Paper accounts with their TOTP saved log in too; a missing token is retried by itself (10 min apart, 3 a day) and a rejected one triggers a fresh login. The bot is the account's authenticator app: the dashboard shows the current code behind **Show code** (owner's choice; each view logged). Paytm redirects to the dashboard, which uses the token by itself only when the login carries this browser's nonce |
 | Alerts | Telegram |
 
 ## Phase 2 — Validation

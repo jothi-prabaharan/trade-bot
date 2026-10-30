@@ -183,32 +183,101 @@ public class BrokerSetupTests
     }
 }
 
+public class AutoLoginStatusTests
+{
+    private static readonly DateTime SaturdayNight = TradeBot.Application.Engine.Ist.ToUtc(WorkerFixture.Saturday, new TimeOnly(0, 33));
+
+    [Fact]
+    public void A_totp_ready_account_logs_in_by_itself_and_says_when()
+    {
+        var s = BrokerSetup.AutoLogin(WorkerFixture.Account(7, TradeMode.Paper), null, SaturdayNight, new TimeOnly(8, 45), Validation.MarketCalendar.WeekendsOnly);
+        Assert.True(s.Enabled);
+        Assert.Contains("logs in by itself at 08:45 IST on trading days", s.Note);
+        Assert.Contains("10 minutes later (3 tries a day)", s.Note);
+        Assert.Equal("Mon 02 Nov, 08:45", s.NextIst);
+        Assert.Null(s.Last);
+    }
+
+    [Fact]
+    public void What_stops_the_automatic_login_is_named()
+    {
+        var paper = BrokerSetup.AutoLogin(WorkerFixture.Account(7, TradeMode.Paper, totp: null), null, SaturdayNight, new TimeOnly(8, 45), Validation.MarketCalendar.WeekendsOnly);
+        Assert.Equal((false, "Not logged in automatically: add TOTP secret to the account profile."), (paper.Enabled, paper.Note));
+        Assert.Null(paper.NextIst);
+
+        var real = BrokerSetup.AutoLogin(WorkerFixture.Account(7, totp: null), null, SaturdayNight, new TimeOnly(8, 45), Validation.MarketCalendar.WeekendsOnly);
+        Assert.False(real.Enabled);
+        Assert.Contains("needs TOTP secret first", real.Note);
+
+        var inactive = BrokerSetup.AutoLogin(WorkerFixture.Account(7, active: false), null, SaturdayNight, new TimeOnly(8, 45), Validation.MarketCalendar.WeekendsOnly);
+        Assert.Contains("inactive", inactive.Note);
+    }
+
+    [Fact]
+    public void The_latest_login_is_reported_with_its_stored_error()
+    {
+        var failed = new AccountAuthToken
+        {
+            AccountId = 7, LoginStatus = LoginStatus.Failed, LoginMethod = LoginMethod.Headless, AttemptCount = 2,
+            ErrorMessage = "Paytm rejected the TOTP code.", CreatedAt = new DateTime(2026, 10, 30, 3, 15, 0, DateTimeKind.Utc),
+        };
+        var last = BrokerSetup.AutoLogin(WorkerFixture.Account(7), failed, SaturdayNight, new TimeOnly(8, 45), Validation.MarketCalendar.WeekendsOnly).Last!;
+        Assert.Equal(("Fri 30 Oct, 08:45", "HEADLESS", false, 2, "Paytm rejected the TOTP code."), (last.AtIst, last.Method, last.Ok, last.Attempts, last.Error));
+    }
+}
+
 public class BrokerHealthMonitorTests
 {
     [Fact]
-    public async Task A_token_paytm_rejects_raises_one_alert_and_shows_as_rejected()
+    public async Task A_token_paytm_rejects_raises_one_alert_shows_as_rejected_and_logs_in_again()
     {
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 11, 2, 5, 0, 0, TimeSpan.Zero));
         var accounts = Stub<IAccountRepository>.Create();
         var paytm = Stub<IPaytmMoneyClient>.Create();
         var trading = Stub<ITradingRepository>.Create();
         var alerts = Stub<IAlertSender>.Create();
+        var bus = Stub<IEventBus>.Create();
         var account = WorkerFixture.Account(7);
         var token = new AccountAuthToken { AccountId = 7, XJwtToken = "jwt", LoginStatus = LoginStatus.Success, TokenExpiry = clock.GetUtcNow().UtcDateTime.AddHours(10), CreatedAt = clock.GetUtcNow().UtcDateTime.AddHours(-1) };
         accounts.On(nameof(IAccountRepository.ListAsync), _ => new List<TradingAccount> { account, WorkerFixture.Account(8) });
         accounts.On(nameof(IAccountRepository.LatestTokensAsync), _ => new Dictionary<long, AccountAuthToken> { [7] = token });
         paytm.On(nameof(IPaytmMoneyClient.GetProfileAsync), _ => Task.FromException<BrokerProfile>(new BrokerApiException("x", 401, "PM_MERCHANT_AUTH_401669", "Invalid Token", "{}")));
         var checker = new BrokerConnectionChecker(paytm.Object, clock, NullLogger<BrokerConnectionChecker>.Instance);
-        var monitor = new BrokerHealthMonitor(accounts.Object, checker, trading.Object, alerts.Object, clock);
+        var monitor = new BrokerHealthMonitor(accounts.Object, checker, trading.Object, alerts.Object, bus.Object, clock);
 
         Assert.Equal(1, await monitor.CheckAsync(null, CancellationToken.None));
         Assert.Equal(1, await monitor.CheckAsync(null, CancellationToken.None));
 
         // Account 8 has no token: never sent to Paytm; the rejection alerts once, not every 10 minutes
         Assert.Equal(2, paytm.Calls(nameof(IPaytmMoneyClient.GetProfileAsync)).Count);
-        Assert.Contains("PM_MERCHANT_AUTH_401669", (string)Assert.Single(alerts.Calls(nameof(IAlertSender.SendAsync)))[1]!);
+        var alert = (string)Assert.Single(alerts.Calls(nameof(IAlertSender.SendAsync)))[1]!;
+        Assert.Contains("PM_MERCHANT_AUTH_401669", alert);
+        Assert.Contains("logging in again with the TOTP", alert);
         Assert.Equal("TOKEN_REJECTED", ((SystemEvent)Assert.Single(trading.Calls(nameof(ITradingRepository.AddEventAsync)))[0]!).EventType);
         Assert.True(checker.Last(7)!.TokenRejected);
+        // The TOTP is saved, so the Auth worker is asked for a fresh login (once for this token)
+        var request = Assert.Single(bus.Calls(nameof(IEventBus.PublishAsync)));
+        Assert.Equal((EventChannels.LoginRequested, "7"), ((string)request[0]!, (string)request[1]!));
+    }
+
+    [Fact]
+    public async Task Without_a_totp_a_rejected_token_asks_for_a_manual_login()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 11, 2, 5, 0, 0, TimeSpan.Zero));
+        var accounts = Stub<IAccountRepository>.Create();
+        var paytm = Stub<IPaytmMoneyClient>.Create();
+        var alerts = Stub<IAlertSender>.Create();
+        var bus = Stub<IEventBus>.Create();
+        var token = new AccountAuthToken { AccountId = 7, XJwtToken = "jwt", LoginStatus = LoginStatus.Success, TokenExpiry = clock.GetUtcNow().UtcDateTime.AddHours(10) };
+        accounts.On(nameof(IAccountRepository.ListAsync), _ => new List<TradingAccount> { WorkerFixture.Account(7, totp: null) });
+        accounts.On(nameof(IAccountRepository.LatestTokensAsync), _ => new Dictionary<long, AccountAuthToken> { [7] = token });
+        paytm.On(nameof(IPaytmMoneyClient.GetProfileAsync), _ => Task.FromException<BrokerProfile>(new BrokerApiException("x", 401, "PM_MERCHANT_AUTH_401669", "Invalid Token", "{}")));
+        var checker = new BrokerConnectionChecker(paytm.Object, clock, NullLogger<BrokerConnectionChecker>.Instance);
+        var monitor = new BrokerHealthMonitor(accounts.Object, checker, Stub<ITradingRepository>.Create().Object, alerts.Object, bus.Object, clock);
+
+        await monitor.CheckAsync(null, CancellationToken.None);
+        Assert.Contains("Use Login now", (string)Assert.Single(alerts.Calls(nameof(IAlertSender.SendAsync)))[1]!);
+        Assert.Empty(bus.Calls(nameof(IEventBus.PublishAsync)));
     }
 
     [Fact]

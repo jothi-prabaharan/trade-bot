@@ -58,7 +58,8 @@ public sealed class DashboardService(ConfigCache config, TokenStore tokens, Trad
             var tok = tokens.Latest(a.AccountId);
             var status = tok switch
             {
-                null when a.TradeMode == TradeMode.Paper && !a.IsDataProvider => "NOT_REQUIRED",
+                // Paper accounts the Auth worker leaves alone (no TOTP login set up) need no token
+                null when a.TradeMode == TradeMode.Paper && !a.IsDataProvider && !BrokerAuthService.NeedsLogin(a) => "NOT_REQUIRED",
                 null => "MISSING",
                 { LoginStatus: LoginStatus.Failed } => "FAILED",
                 { TokenExpiry: { } e } when e <= now => "EXPIRED",
