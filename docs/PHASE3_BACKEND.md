@@ -24,7 +24,7 @@ All three use `AddSystemd()` (systemd `Type=notify`, journal logging) and read t
 |---|---|---|
 | 08:30 | News worker | Pre-market scan: macro (NIFTY/BANKNIFTY) + F&O/index-weight companies in batches of 30; sentiment recomputed |
 | 08:40 | Engine | Pre-open: seeds missing detectors into `mst.chart_patterns`, scrip master sync (`mst.security_master`) |
-| 08:45 | Auth worker | Headless login for REAL and data-provider accounts without today's token (mobile → password → authenticator TOTP). Retries every 30 s only for transient failures; an SMS-OTP screen, a rejected password or missing credentials stop at once (a retry would text another OTP or risk locking the account). Then Telegram/push alert with the reason and the manual login link |
+| 08:45 | Auth worker | Headless login for REAL and data-provider accounts without today's token (mobile → password → code screens until the redirect: authenticator TOTP, login PIN, or SMS OTP). Each account has its own saved Chromium profile, so Paytm sees a known device instead of a new browser it challenges with an SMS OTP. On an SMS-OTP screen the bot switches to the authenticator if offered; otherwise it alerts and shows an OTP box on the account card for 3 minutes, ticks "trust this device" and submits the typed OTP (a rejected OTP is asked for again). Retries every 30 s only before the login ID is sent or for transient failures; a rejected password/TOTP/PIN, an unanswered OTP, missing credentials or an unrecognised page (described in the alert) stop at once. Then Telegram/push alert with the reason and the manual login link |
 | 08:50 (or login + 5 min) | Engine | Prep: feed connect, day PnL rows, REAL funds/profile sync, daily stock watchlist (60% catalyst + 40% liquidity), history backfill (5 days) |
 | 09:15 – 14:45 | Engine | Entries allowed (`strategy_config.entry_start_time` / `entry_cutoff_time`) |
 | every 15 min in session | News worker | Periodic macro scan (`PERIODIC`) |
@@ -108,7 +108,7 @@ Secrets (`[Encrypted]`) are write-only. They are stored as `v1:` AES-GCM ciphert
 | `Auth:AdminUser`, `Auth:AdminPasswordHash`, `Auth:JwtKey`, `Auth:TokenHours` (8), `Auth:RememberDays` (30) | API | hash via `dotnet TradeBot.Api.dll hash-password`; JwtKey base64 ≥ 32 bytes (a new key signs everyone out) |
 | `Engine:Enabled`, `Database:MigrateOnStartup`, `Cors:Origins` | API | |
 | `PaytmMoney:*` | API, Auth | `OrderSource`, `SecurityMasterFile`, `StrikeDivisor`, `MaxSubscriptionsPerConnection`, `PriceChartIntervals` |
-| `BrokerLogin:*` | Auth | `ChromiumExecutablePath`, `Headless`, timeouts, data-driven `Steps` (`secondfactor` enters the TOTP only on an authenticator prompt and switches away from an SMS-OTP prompt when the page offers it), screen patterns (`AuthenticatorPattern`, `SmsOtpPattern`, `BadPasswordPattern`, `SwitchToAuthenticatorSelector`), failure screenshots |
+| `BrokerLogin:*` | Auth | `ChromiumExecutablePath`, `Headless`, timeouts, `ProfileDirectory` (saved profile per account; empty = throwaway browser), `SmsOtpWaitSeconds`, data-driven `Steps` (`secondfactor` answers each code screen: TOTP on an authenticator prompt, the PIN on a PIN prompt, the dashboard OTP on an SMS-OTP prompt), screen patterns and selectors (`AuthenticatorPattern`, `SmsOtpPattern`, `PinPattern`, `BadPasswordPattern`, `RejectedCodePattern`, `CodeInputSelector`, `SubmitSelector`, `SwitchToAuthenticatorSelector`, `TrustDevicePattern`), failure screenshots |
 
 | `WebPush:Subject` | all | VAPID contact (`mailto:` or `https:`); defaults to the dashboard origin `Cors:Origins:0` |
 

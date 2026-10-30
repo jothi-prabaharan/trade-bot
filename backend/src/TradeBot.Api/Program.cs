@@ -28,6 +28,7 @@ builder.Services.AddTradeBotInfrastructure(config);
 builder.Services.AddTradeBotEngine();
 var engineEnabled = config.GetValue("Engine:Enabled", true);
 if (engineEnabled) builder.Services.AddHostedService<EngineHostedService>();
+builder.Services.AddHostedService<OtpPromptListener>();
 
 builder.Services.AddControllers().AddJsonOptions(o => ApiJson.Configure(o.JsonSerializerOptions));
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>

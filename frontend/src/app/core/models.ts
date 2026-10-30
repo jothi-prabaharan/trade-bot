@@ -29,7 +29,11 @@ export interface AccountCard {
   openingBalance: number; availableMargin: number; utilisedMargin: number; allocatedCapital: number; fundsSyncedAtUtc: string | null;
   /** Opening balance + today's net PnL (realized + MTM − charges). */
   balance: number; balanceChange: number; balanceChangePct: number;
+  /** Set while the Auth worker holds the Paytm page open for the SMS OTP. */
+  otpPrompt: OtpPrompt | null;
 }
+
+export interface OtpPrompt { accountId: number; untilUtc: string; sentTo: string | null; note: string | null }
 
 export interface PnlSummary {
   realizedGross: number; unrealizedMtm: number; charges: number; net: number; totalTrades: number; wins: number; losses: number;

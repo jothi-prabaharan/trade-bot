@@ -43,6 +43,8 @@ log "Service user and directories"
 id "$TRADEBOT_USER" > /dev/null 2>&1 || useradd --system --home-dir "$TRADEBOT_STATE" --shell /usr/sbin/nologin "$TRADEBOT_USER"
 install -d -m 0751 "$TRADEBOT_HOME" "$TRADEBOT_RELEASES"
 install -d -m 0750 -o "$TRADEBOT_USER" -g "$TRADEBOT_USER" "$TRADEBOT_STATE" "$TRADEBOT_STATE/auth-failures"
+# Saved Chromium profiles (Paytm cookies, "trusted device"): only the service user reads them
+install -d -m 0700 -o "$TRADEBOT_USER" -g "$TRADEBOT_USER" "$TRADEBOT_STATE/browser-profiles"
 install -d -m 0700 "$TRADEBOT_BACKUPS"
 chgrp "$TRADEBOT_USER" "$TRADEBOT_ETC"
 

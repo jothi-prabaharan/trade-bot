@@ -36,6 +36,7 @@ public static class DependencyInjection
         services.AddSingleton<WatchlistBuilder>();
         services.AddSingleton<FundsSync>();
         services.AddSingleton<EngineOrchestrator>();
+        services.AddSingleton<OtpPrompts>();
         services.AddSingleton<DashboardService>();
         services.AddSingleton<PnlCurveService>();
         services.AddSingleton<CandleQueryService>();
@@ -48,5 +49,5 @@ public static class DependencyInjection
 
     /// <summary>TradeBot.Worker.Auth: daily headless broker logins.</summary>
     public static IServiceCollection AddTradeBotBrokerAuth(this IServiceCollection services) =>
-        services.AddSingleton<BrokerAuthService>().AddSingleton<AuthScheduler>();
+        services.AddSingleton<BrokerAuthService>().AddSingleton<AuthScheduler>().AddSingleton<ISmsOtpPrompt, SmsOtpRelay>();
 }

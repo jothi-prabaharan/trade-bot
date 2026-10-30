@@ -60,7 +60,8 @@ Internet ──443──> nginx (TLS, IP allowlist, CSP, rate limits)
    - Test it with `sudo tradebotctl backup`.
 7. **Configure the bot from the dashboard** (`https://<domain>`):
    - Add accounts (all start in PAPER), with API key/secret, login ID, password, PIN and TOTP secret for the REAL/data-provider account.
-   - **Enable TOTP on the Paytm Money account first** (Paytm Money app → security settings → authenticator/TOTP) and save that same secret in the account profile. Without it Paytm sends an SMS OTP at login; the bot then stops and alerts instead of retrying, and you log in with the manual link that day.
+   - **Enable TOTP on the Paytm Money account first** (Paytm Money app → security settings → authenticator/TOTP) and save that same secret in the account profile.
+   - The first headless login from the server is a new device to Paytm, so it may still send one SMS OTP. You get an alert, and the account card shows "Paytm sent an OTP" with a box: type the code within 3 minutes. The bot ticks "trust this device" and keeps a browser profile per account in `/var/lib/tradebot/browser-profiles`, so later logins use the TOTP only. To make Paytm forget the server, stop `tradebot-auth` and delete that account's `account-<id>` folder.
    - Set the Gemini key and the Telegram channel.
 8. **Muhurat session:** add it under *Market holidays* once NSE notifies its timings. Without it the bot treats that Sunday as closed.
 

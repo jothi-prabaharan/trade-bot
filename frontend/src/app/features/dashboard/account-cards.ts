@@ -1,6 +1,6 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
-import { faArrowRightArrowLeft, faKey, faPenToSquare, faPowerOff, faRotate, faServer, faSliders } from '@fortawesome/free-solid-svg-icons';
+import { faArrowRightArrowLeft, faKey, faMobileScreen, faPenToSquare, faPowerOff, faRotate, faServer, faSliders } from '@fortawesome/free-solid-svg-icons';
 import { firstValueFrom } from 'rxjs';
 import { ApiService, apiErrorText } from '../../core/api';
 import { DashboardStore } from '../../core/dashboard-store';
@@ -20,7 +20,7 @@ const TOKEN_BADGE: Record<TokenStatus, { text: string; cls: string }> = {
   NOT_REQUIRED: { text: 'No broker login', cls: 'text-bg-secondary' },
 };
 
-interface CardView { card: AccountCard; profile: AccountDto | undefined; pnl: AccountPnl | undefined; secondsLeft: number | null }
+interface CardView { card: AccountCard; profile: AccountDto | undefined; pnl: AccountPnl | undefined; secondsLeft: number | null; otpSecondsLeft: number | null }
 
 @Component({
   selector: 'tb-account-cards',
@@ -41,6 +41,22 @@ interface CardView { card: AccountCard; profile: AccountDto | undefined; pnl: Ac
               @if (v.card.isDataProvider) { <span class="badge text-bg-dark border" title="Market-data provider"><fa-icon [icon]="i.feed" /></span> }
               @if (!v.card.isActive) { <span class="badge text-bg-secondary">Inactive</span> }
             </div>
+
+            @if (v.otpSecondsLeft !== null && v.card.otpPrompt; as p) {
+              <form class="alert alert-warning p-2 mb-3" data-testid="otp-prompt" (submit)="$event.preventDefault(); submitOtp(v.card, otpInput.value)">
+                <label class="form-label small fw-semibold mb-1" [for]="'tb-otp-' + v.card.accountId">
+                  <fa-icon [icon]="i.sms" class="me-1" />Paytm sent an OTP{{ p.sentTo ? ' to ' + p.sentTo : '' }}
+                  <span class="fw-normal">· {{ duration(v.otpSecondsLeft) }} left</span>
+                </label>
+                @if (p.note) { <div class="small mb-1">{{ p.note }}</div> }
+                <div class="input-group">
+                  <input #otpInput [id]="'tb-otp-' + v.card.accountId" class="form-control num" inputmode="numeric" autocomplete="one-time-code"
+                    pattern="[0-9]{4,8}" maxlength="8" placeholder="SMS OTP" required [disabled]="sending() === v.card.accountId" />
+                  <button type="submit" class="btn btn-warning" [disabled]="sending() === v.card.accountId">Submit OTP</button>
+                </div>
+                <div class="small text-body-secondary mt-1">One time only: the bot ticks "trust this device", so later logins use TOTP.</div>
+              </form>
+            }
 
             <div class="d-flex align-items-center flex-wrap gap-2 mb-3 small">
               <span class="badge" [class]="token(v.card.tokenStatus).cls">{{ token(v.card.tokenStatus).text }}</span>
@@ -108,7 +124,8 @@ export class AccountCards {
   private readonly api = inject(ApiService);
   private readonly confirm = inject(ConfirmService);
   private readonly toasts = inject(ToastService);
-  protected readonly i = { feed: faServer, retry: faRotate, key: faKey, edit: faPenToSquare, risk: faSliders, mode: faArrowRightArrowLeft, kill: faPowerOff };
+  protected readonly i = { feed: faServer, retry: faRotate, key: faKey, edit: faPenToSquare, risk: faSliders, mode: faArrowRightArrowLeft, kill: faPowerOff, sms: faMobileScreen };
+  protected readonly sending = signal<number | null>(null);
   protected readonly pnlClass = pnlClass;
   protected readonly duration = formatDuration;
 
@@ -121,6 +138,7 @@ export class AccountCards {
       profile: profiles.get(card.accountId),
       pnl: o?.perAccount.find((p) => p.accountId === card.accountId),
       secondsLeft: card.tokenExpiryUtc ? Math.max(0, (Date.parse(card.tokenExpiryUtc) - now) / 1000) : null,
+      otpSecondsLeft: card.otpPrompt && Date.parse(card.otpPrompt.untilUtc) > now ? (Date.parse(card.otpPrompt.untilUtc) - now) / 1000 : null,
     }));
   });
 
@@ -140,6 +158,21 @@ export class AccountCards {
       this.toasts.show('info', 'Login requested', `The auth worker is logging in ${c.accountName}.`);
     } catch (e) {
       this.toasts.show('danger', 'Login request failed', apiErrorText(e));
+    }
+  }
+
+  protected async submitOtp(c: AccountCard, value: string): Promise<void> {
+    const otp = value.replace(/\s/g, '');
+    if (!/^\d{4,8}$/.test(otp)) { this.toasts.show('warning', 'Check the OTP', 'Enter the 4 to 8 digit code from the SMS.'); return; }
+    this.sending.set(c.accountId);
+    try {
+      await firstValueFrom(this.api.submitOtp(c.accountId, otp));
+      this.toasts.show('info', 'OTP sent', `The auth worker is finishing the Paytm login for ${c.accountName}.`);
+      void this.store.refreshOverview();
+    } catch (e) {
+      this.toasts.show('danger', 'OTP not accepted', apiErrorText(e), true);
+    } finally {
+      this.sending.set(null);
     }
   }
 

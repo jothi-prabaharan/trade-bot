@@ -128,3 +128,16 @@ public static class DashboardSocket
             catch (WebSocketException) { /* client already gone */ }
     }
 }
+
+/// <summary>Keeps the account cards' OTP boxes in step with the Auth worker; runs even when the engine is disabled.</summary>
+public sealed class OtpPromptListener(IEventBus bus, TradeBot.Application.Auth.OtpPrompts otp) : IHostedService
+{
+    public Task StartAsync(CancellationToken ct)
+    {
+        bus.Subscribe(EventChannels.OtpRequested, (p, _) => { otp.OnRequested(p); return Task.CompletedTask; });
+        bus.Subscribe(EventChannels.OtpClosed, (p, _) => { otp.OnClosed(p); return Task.CompletedTask; });
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+}

@@ -1,4 +1,5 @@
 using TradeBot.Application.Abstractions;
+using TradeBot.Application.Auth;
 using TradeBot.Application.Validation;
 using TradeBot.Domain.Entities.Mst;
 using TradeBot.Domain.Entities.Trn;
@@ -10,7 +11,7 @@ public sealed record AccountCard(
     long AccountId, string AccountName, string ClientId, string UserName, TradeMode Mode, bool IsDataProvider, bool IsActive,
     string TokenStatus, DateTime? TokenExpiryUtc, long? TokenSecondsLeft,
     decimal OpeningBalance, decimal AvailableMargin, decimal UtilisedMargin, decimal AllocatedCapital, DateTime? FundsSyncedAtUtc,
-    decimal Balance, decimal BalanceChange, decimal BalanceChangePct);
+    decimal Balance, decimal BalanceChange, decimal BalanceChangePct, OtpPrompt? OtpPrompt = null);
 
 public sealed record PnlSummary(
     decimal RealizedGross, decimal UnrealizedMtm, decimal Charges, decimal Net, int TotalTrades, int Wins, int Losses, decimal WinRatePct,
@@ -33,7 +34,7 @@ public sealed record DashboardOverview(BotStatus Bot, IReadOnlyList<AccountCard>
 
 /// <summary>Builds the single-screen dashboard: DB rows (accounts, PnL ledger, trade book) overlaid with live engine state.</summary>
 public sealed class DashboardService(ConfigCache config, TokenStore tokens, TradeManager trades, IMarketFeed feed, ITradingRepository trading,
-    EngineOrchestrator orchestrator, TimeProvider clock)
+    EngineOrchestrator orchestrator, OtpPrompts otp, TimeProvider clock)
 {
     /// <summary><paramref name="scope"/>: "all", "real", "paper" or an account id.</summary>
     public async Task<DashboardOverview> BuildAsync(string scope, CancellationToken ct)
@@ -72,7 +73,7 @@ public sealed class DashboardService(ConfigCache config, TokenStore tokens, Trad
             return new AccountCard(a.AccountId, a.AccountName, a.ClientId, a.UserName, a.TradeMode, a.IsDataProvider, a.IsActive, status,
                 tok?.TokenExpiry, tok?.TokenExpiry is { } exp ? (long)Math.Max(0, (exp - now).TotalSeconds) : null,
                 opening, r?.AvailableMargin ?? 0, r?.UtilisedMargin ?? 0, r?.AllocatedCapital ?? 0, r?.FundsSyncedAt,
-                Math.Round(opening + change, 2), Math.Round(change, 2), opening == 0 ? 0 : Math.Round(change / opening * 100, 2));
+                Math.Round(opening + change, 2), Math.Round(change, 2), opening == 0 ? 0 : Math.Round(change / opening * 100, 2), otp.For(a.AccountId));
         }).ToList();
 
         var consolidated = Combine(perAccount.Select(p => p.Pnl).ToList());

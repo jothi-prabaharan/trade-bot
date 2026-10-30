@@ -157,6 +157,28 @@ test('engine events arrive over the socket as toasts', async () => {
   await expect(page.locator('tb-info-tabs tbody tr').first()).toContainText('E2E_ALERT');
 });
 
+test('Paytm SMS OTP: the card asks for it while the auth worker waits, and relays the code to it', async () => {
+  const client = new pg.Client(dbConfig());
+  await client.connect();
+  const id = (await client.query(`SELECT account_id FROM mst.trading_accounts WHERE account_name = 'Real Primary'`)).rows[0].account_id as string;
+  const relayed = new Promise<string>((resolve) => client.on('notification', (n) => resolve(n.payload ?? '')));
+  await client.query('LISTEN tradebot_otp_submitted');
+  // What the Auth worker announces when Paytm shows its SMS-OTP screen
+  const until = new Date(Date.now() + 180_000).toISOString();
+  await client.query(`SELECT pg_notify('tradebot_otp_requested', $1)`,
+    [JSON.stringify({ AccountId: Number(id), UntilUtc: until, SentTo: '******3210', Note: null })]);
+
+  const box = card('Real Primary').getByTestId('otp-prompt');
+  await expect(box).toContainText('Paytm sent an OTP to ******3210');
+  await expect(box).toContainText(/0:0[23]:\d\d left/);
+  await box.getByPlaceholder('SMS OTP').fill('482913');
+  await box.getByRole('button', { name: 'Submit OTP' }).click();
+  expect(await relayed).toBe(`${id}:482913`);
+  await expect(toast('OTP sent')).toBeVisible();
+  await expect(box).toHaveCount(0);
+  await client.end();
+});
+
 test('strategy drawer blocks inconsistent session times', async () => {
   await page.getByRole('button', { name: 'Strategy settings' }).click();
   const d = drawer('Strategy settings');

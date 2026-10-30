@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using TradeBot.Api.Hosting;
 using TradeBot.Application.Abstractions;
+using TradeBot.Application.Auth;
 using TradeBot.Application.Engine;
 using TradeBot.Application.Validation;
 using TradeBot.Application.Validation.Forms;
@@ -40,7 +41,7 @@ internal static class Json
 [ApiController, Authorize, Route("api/accounts")]
 public sealed class AccountController(
     IAccountRepository accounts, ITradingRepository trading, TradeManager trades, IPaytmMoneyClient paytm, IEventBus bus,
-    ConfigCache config, EngineOrchestrator orchestrator, TimeProvider clock) : ControllerBase
+    ConfigCache config, EngineOrchestrator orchestrator, OtpPrompts otp, TimeProvider clock) : ControllerBase
 {
     private static readonly string[] Secrets = ["apiKey", "apiSecret", "totpSecret", "loginPassword", "loginPin"];
 
@@ -137,6 +138,21 @@ public sealed class AccountController(
     {
         if (await accounts.GetAsync(id, ct) is null) return NotFound();
         await bus.PublishAsync(EventChannels.LoginRequested, id.ToString(), ct);
+        return Accepted();
+    }
+
+    public sealed record OtpBody(string Otp);
+
+    /// <summary>The SMS OTP Paytm sent, typed on the dashboard while the Auth worker holds the login page open.</summary>
+    [HttpPost("{id:long}/auth/otp"), EnableRateLimiting("mutations")]
+    public async Task<IActionResult> SubmitOtp(long id, OtpBody body, CancellationToken ct)
+    {
+        if (await accounts.GetAsync(id, ct) is null) return NotFound();
+        var code = body.Otp?.Trim() ?? "";
+        if (!SmsOtpRelay.IsOtp(code)) return ApiResults.Invalid("OTP_FORMAT", "Enter the 4 to 8 digit OTP from the SMS.", "otp");
+        if (otp.For(id) is null) return ApiResults.Invalid("OTP_NOT_PENDING", "The login is not waiting for an OTP any more. Start the login again.", "otp");
+        await bus.PublishAsync(EventChannels.OtpSubmitted, $"{id}:{code}", ct);
+        otp.OnClosed(id.ToString());
         return Accepted();
     }
 

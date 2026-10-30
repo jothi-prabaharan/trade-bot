@@ -34,6 +34,7 @@ export class ApiService {
   exchangeRequestToken(id: number, requestToken: string): Observable<{ tokenExpiry: string }> {
     return this.http.post<{ tokenExpiry: string }>(`/api/accounts/${id}/auth/request-token`, { requestToken });
   }
+  submitOtp(id: number, otp: string): Observable<void> { return this.http.post<void>(`/api/accounts/${id}/auth/otp`, { otp }); }
   triggerLogin(id: number): Observable<void> { return this.http.post<void>(`/api/accounts/${id}/auth/login`, {}); }
   accountKill(id: number, reason: string): Observable<void> { return this.http.post<void>(`/api/accounts/${id}/kill-switch`, { reason }); }
 

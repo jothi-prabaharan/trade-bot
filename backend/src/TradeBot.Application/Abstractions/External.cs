@@ -123,12 +123,25 @@ public static class EventChannels
     public const string NewsCheckRequested = "tradebot_news_check";     // payload: instrument_id (spike) or manual:{instrument_id|all}
     public const string ConfigChanged = "tradebot_config_changed";      // payload: table name
     public const string LoginRequested = "tradebot_login_requested";    // payload: account_id
+    public const string OtpRequested = "tradebot_otp_requested";        // payload: OtpPrompt JSON (Auth worker → API)
+    public const string OtpClosed = "tradebot_otp_closed";              // payload: account_id (Auth worker → API)
+    public const string OtpSubmitted = "tradebot_otp_submitted";        // payload: account_id:otp (API → Auth worker)
 }
 
 public interface IBrokerLoginAutomation
 {
     /// <summary>Drives the broker login page and returns the redirect's request token.</summary>
     Task<string> GetRequestTokenAsync(TradingAccount account, string loginUrl, CancellationToken ct);
+}
+
+/// <summary>An SMS OTP the login page is waiting for; the dashboard shows an entry box until <see cref="UntilUtc"/>.</summary>
+public sealed record OtpPrompt(long AccountId, DateTime UntilUtc, string? SentTo, string? Note);
+
+/// <summary>Asks the dashboard user for the SMS OTP Paytm just sent (the first login from a new browser profile needs one).</summary>
+public interface ISmsOtpPrompt
+{
+    /// <summary>The OTP typed on the dashboard, or null when none arrived within <paramref name="timeout"/>.</summary>
+    Task<string?> AskAsync(TradingAccount account, string? sentTo, string? note, TimeSpan timeout, CancellationToken ct);
 }
 
 /// <summary>

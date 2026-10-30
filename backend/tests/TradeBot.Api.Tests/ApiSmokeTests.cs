@@ -26,6 +26,29 @@ public class ApiSmokeTests(ApiFactory api)
         Assert.Equal(HttpStatusCode.Unauthorized, (await api.CreateClient().GetAsync(path)).StatusCode);
 
     [Fact]
+    public async Task Sms_otp_is_accepted_only_while_the_auth_worker_waits_for_it()
+    {
+        var client = await api.AuthorizedClientAsync();
+        var id = (await client.GetFromJsonAsync<JsonArray>("/api/accounts"))![0]!["accountId"]!.GetValue<long>();
+        async Task<string?> Submit(string otp)
+        {
+            var r = await client.PostAsJsonAsync($"/api/accounts/{id}/auth/otp", new { otp });
+            return r.StatusCode == HttpStatusCode.Accepted ? null : (await r.Content.ReadFromJsonAsync<JsonObject>())!["errors"]![0]!["code"]!.GetValue<string>();
+        }
+
+        Assert.Equal("OTP_NOT_PENDING", await Submit("482913"));
+        var prompts = api.Get<TradeBot.Application.Auth.OtpPrompts>();
+        prompts.OnRequested(System.Text.Json.JsonSerializer.Serialize(
+            new TradeBot.Application.Abstractions.OtpPrompt(id, api.Clock.GetUtcNow().UtcDateTime.AddMinutes(3), "******3210", null)));
+        var card = (await client.GetFromJsonAsync<JsonObject>("/api/dashboard/overview"))!["accounts"]!.AsArray().First(a => a!["accountId"]!.GetValue<long>() == id)!;
+        Assert.Equal("******3210", card["otpPrompt"]!["sentTo"]!.GetValue<string>());
+
+        Assert.Equal("OTP_FORMAT", await Submit("12ab"));
+        Assert.Null(await Submit(" 482913 "));
+        Assert.Null(prompts.For(id));
+    }
+
+    [Fact]
     public async Task Wrong_password_is_rejected()
     {
         var r = await api.CreateClient().PostAsJsonAsync("/api/auth/login", new { username = "admin", password = "nope" });
