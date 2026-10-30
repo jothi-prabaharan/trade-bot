@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TradeBot.Application.Abstractions;
@@ -18,14 +19,28 @@ namespace TradeBot.Infrastructure.Tests;
 internal sealed class FakeHandler(Func<HttpRequestMessage, string?, (HttpStatusCode, string)> respond) : HttpMessageHandler
 {
     public List<(HttpRequestMessage Request, string? Body)> Calls { get; } = [];
+    /// <summary>Response headers such as Date and Age.</summary>
+    public Action<HttpResponseMessage>? Decorate { get; init; }
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(ct);
         Calls.Add((request, body));
         var (status, text) = respond(request, body);
-        return new HttpResponseMessage(status) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
+        var response = new HttpResponseMessage(status) { Content = new StringContent(text, Encoding.UTF8, "application/json") };
+        Decorate?.Invoke(response);
+        return response;
     }
+}
+
+/// <summary>Collects formatted log lines, to prove what reaches the logs.</summary>
+internal sealed class ListLogger<T> : ILogger<T>
+{
+    public List<(LogLevel Level, string Message)> Lines { get; } = [];
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public bool IsEnabled(LogLevel logLevel) => true;
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+        Lines.Add((logLevel, formatter(state, exception) + (exception is null ? "" : " " + exception)));
 }
 
 public sealed class PaytmTickParserTests
@@ -75,6 +90,106 @@ public sealed class PaytmClientTests
     {
         var h = new FakeHandler(respond);
         return (new PaytmMoneyClient(new HttpClient(h), Options.Create(new PaytmMoneyOptions()), NullLogger<PaytmMoneyClient>.Instance), h);
+    }
+
+    private static (PaytmMoneyClient Client, FakeHandler Handler, ListLogger<PaytmMoneyClient> Log) Logged(
+        Func<HttpRequestMessage, string?, (HttpStatusCode, string)> respond, Action<HttpResponseMessage>? decorate = null, TimeProvider? clock = null)
+    {
+        var h = new FakeHandler(respond) { Decorate = decorate };
+        var log = new ListLogger<PaytmMoneyClient>();
+        return (new PaytmMoneyClient(new HttpClient(h), Options.Create(new PaytmMoneyOptions()), log, clock), h, log);
+    }
+
+    [Fact]
+    public async Task Gettoken_sends_the_three_fields_trimmed_of_pasted_whitespace()
+    {
+        var (c, h, _) = Logged((_, _) => (HttpStatusCode.OK, """{"access_token":"a.b.c","public_access_token":"P","read_access_token":"R"}"""));
+        await c.GenerateTokensAsync(" key-123\n", "\u200Bsecret-456 ", " req-789 ", default);
+
+        var (req, body) = h.Calls.Single();
+        Assert.Equal((HttpMethod.Post, "https://developer.paytmmoney.com/accounts/v2/gettoken"), (req.Method, req.RequestUri!.ToString()));
+        var json = JsonNode.Parse(body!)!.AsObject();
+        Assert.Equal(["api_key", "api_secret_key", "request_token"], json.Select(p => p.Key));
+        Assert.Equal(("key-123", "secret-456", "req-789"), (json["api_key"]!.GetValue<string>(), json["api_secret_key"]!.GetValue<string>(), json["request_token"]!.GetValue<string>()));
+    }
+
+    [Theory]
+    [InlineData("key 123", "secret", "req", "API key contains spaces")]
+    [InlineData("key", "", "req", "API secret is empty")]
+    [InlineData("key", "secret", null, "request token is empty")]
+    public async Task Gettoken_with_a_blank_or_broken_field_is_not_sent(string apiKey, string apiSecret, string? requestToken, string expected)
+    {
+        var (c, h, _) = Logged((_, _) => (HttpStatusCode.OK, "{}"));
+        var e = await Assert.ThrowsAsync<BrokerLoginException>(() => c.GenerateTokensAsync(apiKey, apiSecret, requestToken!, default));
+        Assert.Contains(expected, e.Message);
+        Assert.Empty(h.Calls);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.OK)]   // FAILURE status inside a 200
+    public async Task Auth_failures_carry_paytm_code_and_are_logged_clearly_without_secrets(HttpStatusCode status)
+    {
+        var (c, _, log) = Logged((_, _) => (status,
+            """{"status":"FAILURE","message":"Invalid Api Key or Api Secret Key or Request Token","error_code":"PM_MERCHANT_AUTH_400607","data":{"api_secret_key":"live-secret-123456"}}"""));
+
+        var e = await Assert.ThrowsAsync<BrokerApiException>(() => c.GenerateTokensAsync("live-key-123456", "live-secret-123456", "live-request-123456", default));
+        Assert.Equal(("PM_MERCHANT_AUTH_400607", "Invalid Api Key or Api Secret Key or Request Token"), (e.ErrorCode, e.BrokerMessage));
+        Assert.DoesNotContain("live-secret-123456", e.Body);
+
+        var error = Assert.Single(log.Lines, l => l.Level == LogLevel.Error).Message;
+        Assert.Contains("Paytm authentication failed on /accounts/v2/gettoken", error);
+        Assert.Contains("PM_MERCHANT_AUTH_400607 Invalid Api Key or Api Secret Key or Request Token", error);
+        Assert.All(log.Lines, l => Assert.DoesNotContain("live-", l.Message));
+    }
+
+    [Fact]
+    public async Task User_details_uses_the_access_token_as_x_jwt_token()
+    {
+        var (c, h, _) = Logged((_, _) => (HttpStatusCode.OK,
+            """{"status":"SUCCESS","data":{"user_id":"PM12345","kyc_name":"Asha Trader","name":"Asha Trader","email":"asha@example.in","mobile":"9876543210"}}"""));
+        var p = await c.GetProfileAsync("access-jwt", default);
+
+        var req = h.Calls.Single().Request;
+        Assert.Equal((HttpMethod.Get, "https://developer.paytmmoney.com/accounts/v1/user/details"), (req.Method, req.RequestUri!.ToString()));
+        Assert.Equal("access-jwt", req.Headers.GetValues("x-jwt-token").Single());
+        Assert.Equal(("PM12345", "Asha Trader", "asha@example.in", "9876543210"), (p.ClientId, p.Name, p.Email, p.Phone));
+    }
+
+    [Fact]
+    public async Task A_rejected_token_on_user_details_is_flagged_as_such()
+    {
+        var (c, _, log) = Logged((_, _) => (HttpStatusCode.Unauthorized, """{"status":"FAILURE","message":"Invalid Token","error_code":"PM_MERCHANT_AUTH_401669"}"""));
+        var e = await Assert.ThrowsAsync<BrokerApiException>(() => c.GetProfileAsync("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig", default));
+        Assert.True(e.TokenRejected);
+        Assert.Equal((401, "PM_MERCHANT_AUTH_401669"), (e.StatusCode, e.ErrorCode));
+        Assert.Contains(log.Lines, l => l.Message.Contains("Invalid Token (the access token is invalid or expired; log in again)"));
+        Assert.All(log.Lines, l => Assert.DoesNotContain("eyJhbGci", l.Message));
+    }
+
+    [Fact]
+    public async Task Paytm_clock_is_read_from_the_date_header_and_probed_with_head()
+    {
+        var local = new DateTimeOffset(2026, 11, 2, 3, 15, 0, TimeSpan.Zero);
+        var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(local);
+        // Paytm is 42 s ahead of us: our clock is behind
+        var (c, h, _) = Logged((_, _) => (HttpStatusCode.OK, "{}"), r => r.Headers.Date = local.AddSeconds(42), clock);
+
+        Assert.Null(c.Clock);
+        var reading = await c.ProbeClockAsync(default);
+        Assert.Equal(HttpMethod.Head, h.Calls.Single().Request.Method);
+        Assert.Equal(42.5, reading!.Skew.TotalSeconds, 1);
+
+        await c.GetFundsAsync("R", default);
+        Assert.Equal(42.5, c.Clock!.Skew.TotalSeconds, 1);
+    }
+
+    [Fact]
+    public async Task An_unreachable_paytm_gives_no_clock_reading()
+    {
+        var h = new FakeHandler((_, _) => throw new HttpRequestException("no route"));
+        var c = new PaytmMoneyClient(new HttpClient(h), Options.Create(new PaytmMoneyOptions()), NullLogger<PaytmMoneyClient>.Instance);
+        Assert.Null(await c.ProbeClockAsync(default));
     }
 
     [Fact]

@@ -414,6 +414,7 @@ public sealed class AuthHarness
     public StrategyConfig Strategy { get; } = new() { AuthMaxRetries = 0 };
     public List<TradingAccount> AccountList { get; } = [];
     public List<AccountAuthToken> Tokens { get; } = [];
+    public BrokerConnectionChecker Connection { get; }
     public BrokerAuthService Service { get; }
     public AuthScheduler Scheduler { get; }
 
@@ -428,8 +429,11 @@ public sealed class AuthHarness
         Configs.On(nameof(IConfigRepository.StrategyAsync), _ => Strategy);
         Paytm.On(nameof(IPaytmMoneyClient.LoginUrl), a => $"https://login.example/?apiKey={a[0]}&state={a[1]}");
         Paytm.On(nameof(IPaytmMoneyClient.GenerateTokensAsync), _ => new BrokerTokens("access", "public", "read", null));
+        Paytm.On(nameof(IPaytmMoneyClient.GetProfileAsync), _ => new BrokerProfile("C7", "Asha Trader", "asha@example.in", "9876543210", "{}"));
         Browser.On(nameof(IBrokerLoginAutomation.GetRequestTokenAsync), _ => "req-token");
-        Service = new BrokerAuthService(Accounts.Object, Configs.Object, Paytm.Object, Browser.Object, Trading.Object, Bus.Object, Alerts.Object, clock, NullLogger<BrokerAuthService>.Instance);
+        Connection = new BrokerConnectionChecker(Paytm.Object, clock, NullLogger<BrokerConnectionChecker>.Instance);
+        Service = new BrokerAuthService(Accounts.Object, Configs.Object, Paytm.Object, Browser.Object, Connection, Trading.Object, Bus.Object, Alerts.Object, clock,
+            NullLogger<BrokerAuthService>.Instance);
         Scheduler = new AuthScheduler(Service, Configs.Object, Accounts.Object, clock, NullLogger<AuthScheduler>.Instance);
     }
 
@@ -465,6 +469,78 @@ public class BrokerAuthServiceTests
         Assert.Contains(h.Bus.Calls(nameof(IEventBus.PublishAsync)), c => (string)c[0]! == EventChannels.TokensUpdated && (string)c[1]! == "7");
         Assert.Empty(h.Alerts.Calls(nameof(IAlertSender.SendAsync)));
         Assert.Equal(new[] { "LOGIN_SUCCESS" }, h.EventTypes);
+
+        // Verified with GET /accounts/v1/user/details using the new access token before it was stored
+        Assert.Equal("access", h.Paytm.Calls(nameof(IPaytmMoneyClient.GetProfileAsync)).Single()[0]);
+        var ev = (SystemEvent)h.Trading.Calls(nameof(ITradingRepository.AddEventAsync)).Single()[0]!;
+        Assert.Contains("verified with GET /accounts/v1/user/details as Asha Trader (client C7)", ev.Message);
+        Assert.True(h.Connection.Last(7)!.Ok);
+    }
+
+    [Fact]
+    public async Task A_token_paytm_rejects_on_user_details_fails_the_login_without_retrying()
+    {
+        var h = new AuthHarness(WorkerFixture.ClockAt(WorkerFixture.Monday, 8, 45));
+        h.Strategy.AuthMaxRetries = 3;
+        h.AccountList.Add(WorkerFixture.Account(7));
+        h.Paytm.On(nameof(IPaytmMoneyClient.GetProfileAsync), _ => Task.FromException<BrokerProfile>(
+            new BrokerApiException("Paytm API returned 401.", 401, "PM_MERCHANT_AUTH_401669", "Invalid Token", "{}")));
+
+        Assert.False(await h.Service.LoginAsync(7, CancellationToken.None));
+        Assert.Single(h.LoggedIn);
+        var t = Assert.Single(h.Tokens);
+        Assert.Equal(LoginStatus.Failed, t.LoginStatus);
+        Assert.Contains("PM_MERCHANT_AUTH_401669 Invalid Token", t.ErrorMessage);
+        Assert.True(h.Connection.Last(7)!.TokenRejected);
+    }
+
+    [Fact]
+    public async Task User_details_for_another_client_id_alerts_but_keeps_the_token()
+    {
+        var h = new AuthHarness(WorkerFixture.ClockAt(WorkerFixture.Monday, 8, 45));
+        h.AccountList.Add(WorkerFixture.Account(7));
+        h.Paytm.On(nameof(IPaytmMoneyClient.GetProfileAsync), _ => new BrokerProfile("C99", "Someone Else", null, null, "{}"));
+
+        Assert.True(await h.Service.LoginAsync(7, CancellationToken.None));
+        Assert.Equal(LoginStatus.Success, Assert.Single(h.Tokens).LoginStatus);
+        Assert.Equal(new[] { "LOGIN_SUCCESS", "LOGIN_CLIENT_MISMATCH" }, h.EventTypes);
+        Assert.Contains("client C99", (string)Assert.Single(h.Alerts.Calls(nameof(IAlertSender.SendAsync)))[1]!);
+    }
+
+    [Fact]
+    public async Task Login_errors_are_stored_and_alerted_without_keys_secrets_or_tokens()
+    {
+        var h = new AuthHarness(WorkerFixture.ClockAt(WorkerFixture.Monday, 8, 45));
+        var a = WorkerFixture.Account(7);
+        a.ApiKey = "live-api-key-0001";
+        a.ApiSecret = "live-api-secret-9999";
+        h.AccountList.Add(a);
+        // Playwright quotes the URL it was loading; a broker body may echo a token
+        h.Browser.On(nameof(IBrokerLoginAutomation.GetRequestTokenAsync), _ => Task.FromException<string>(new TimeoutException(
+            "Timeout 15000ms exceeded navigating to \"https://login.paytmmoney.com/merchant-login?apiKey=live-api-key-0001&state=tb7\" " +
+            "secret live-api-secret-9999 {\"access_token\":\"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc\"}")));
+
+        Assert.False(await h.Service.LoginAsync(7, CancellationToken.None));
+        var stored = Assert.Single(h.Tokens).ErrorMessage!;
+        foreach (var leak in new[] { "live-api-key-0001", "live-api-secret-9999", "eyJhbGciOiJIUzI1NiJ9" })
+        {
+            Assert.DoesNotContain(leak, stored);
+            Assert.DoesNotContain(leak, ((SystemEvent)h.Trading.Calls(nameof(ITradingRepository.AddEventAsync)).Single()[0]!).Message);
+        }
+        Assert.Contains("Timeout 15000ms exceeded", stored);
+        Assert.Contains("apiKey=[redacted]", stored);
+    }
+
+    [Fact]
+    public async Task A_drifting_server_clock_is_named_when_paytm_rejects_the_totp()
+    {
+        var h = new AuthHarness(WorkerFixture.ClockAt(WorkerFixture.Monday, 8, 45));
+        h.AccountList.Add(WorkerFixture.Account(7));
+        h.Paytm.On(nameof(IPaytmMoneyClient.ProbeClockAsync), _ => new BrokerClockReading(TimeSpan.FromSeconds(42), DateTime.UtcNow));
+        h.Browser.On(nameof(IBrokerLoginAutomation.GetRequestTokenAsync), _ => Task.FromException<string>(new BrokerLoginException("Paytm rejected the TOTP code.")));
+
+        Assert.False(await h.Service.LoginAsync(7, CancellationToken.None));
+        Assert.Contains("server clock is 42 s behind Paytm's", Assert.Single(h.Tokens).ErrorMessage);
     }
 
     [Fact]
@@ -509,13 +585,18 @@ public class BrokerAuthServiceTests
     [InlineData(null, "pw", "login ID")]
     [InlineData("9876543210", null, "login password")]
     [InlineData("9876543210", "pw", "not Base32", "JBSWY3DP-EHPK3PXP")]
-    public async Task Incomplete_credentials_fail_before_any_browser_or_otp(string? loginId, string? password, string expected, string totp = "JBSWY3DPEHPK3PXP")
+    [InlineData("9876543210", "pw", "a clean API key", "JBSWY3DPEHPK3PXP", "key with space")]
+    [InlineData("9876543210", "pw", "API secret", "JBSWY3DPEHPK3PXP", "key", "   ")]
+    public async Task Incomplete_credentials_fail_before_any_browser_or_otp(string? loginId, string? password, string expected, string totp = "JBSWY3DPEHPK3PXP",
+        string apiKey = "key", string apiSecret = "secret")
     {
         var h = new AuthHarness(WorkerFixture.ClockAt(WorkerFixture.Monday, 8, 45));
         h.Strategy.AuthMaxRetries = 3;
         var a = WorkerFixture.Account(7, totp: totp);
         a.LoginId = loginId;
         a.LoginPassword = password;
+        a.ApiKey = apiKey;
+        a.ApiSecret = apiSecret;
         h.AccountList.Add(a);
 
         Assert.False(await h.Service.LoginAsync(7, CancellationToken.None));

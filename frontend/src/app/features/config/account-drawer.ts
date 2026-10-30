@@ -10,6 +10,11 @@ import { Drawer } from '../../shared/ui';
 
 const SECRETS = ['apiKey', 'apiSecret', 'loginPassword', 'loginPin'] as const;
 
+/** Spaces, line breaks and invisible characters out, letters upper-cased: what TOTP's Base32 expects. */
+export function normalizeTotpSecret(v: unknown): unknown {
+  return typeof v === 'string' ? v.replace(/[\s\u200B-\u200D\u2060\uFEFF]/g, '').toUpperCase() : v;
+}
+
 @Component({
   selector: 'tb-account-drawer',
   imports: [Drawer, RuleField, SecretField, FormErrors],
@@ -87,6 +92,12 @@ export class AccountDrawer {
         ? { ...p, totpSecret: null, hasApiKey: p.hasApiKey, hasApiSecret: p.hasApiSecret }
         : { isActive: true, isDataProvider: false };
       this.session.set(buildRuleForm(doc, 'tradingAccount', initial, [...SECRETS, 'hasApiKey', 'hasApiSecret', 'version']));
+      // Authenticator apps show the secret as lowercase groups ("jbsw y3dp …"); the rule (and Paytm) want plain Base32
+      const totp = this.session.form()?.group.controls['totpSecret'];
+      totp?.valueChanges.subscribe((v) => {
+        const clean = normalizeTotpSecret(v);
+        if (clean !== v) totp.setValue(clean);
+      });
     } catch {
       this.session.loadError.set('Could not load validation rules.');
     }

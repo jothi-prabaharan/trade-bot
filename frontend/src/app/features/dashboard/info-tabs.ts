@@ -155,7 +155,7 @@ const SIGNAL_BADGE: Record<string, string> = { NEW: 'text-bg-info', DISPATCHED: 
           @case ('events') {
             @if (layout.phone()) {
               <ul class="tb-list" aria-label="Events">
-                @for (e of store.events(); track e.eventId) {
+                @for (e of events(); track e.eventId) {
                   <li class="tb-list-item" [class.tb-expanded]="expanded() === 'e' + e.eventId">
                     <button type="button" class="tb-list-toggle d-block w-100" [attr.aria-expanded]="expanded() === 'e' + e.eventId" (click)="toggle('e' + e.eventId)">
                       <span class="d-flex align-items-center gap-2 small">
@@ -176,7 +176,7 @@ const SIGNAL_BADGE: Record<string, string> = { NEW: 'text-bg-info', DISPATCHED: 
             <table class="table table-sm tb-grid mb-0">
               <thead><tr><th>Time</th><th>Severity</th><th>Type</th><th>Account</th><th>Message</th></tr></thead>
               <tbody>
-                @for (e of store.events(); track e.eventId) {
+                @for (e of events(); track e.eventId) {
                   <tr>
                     <td class="num">{{ e.createdAt | ist: true }}</td><td><span class="badge" [class]="severity(e.severity)">{{ e.severity }}</span></td>
                     <td class="small text-nowrap">{{ e.eventType }}</td><td class="small">{{ accountName(e.accountId) }}</td><td class="small">{{ e.message }}</td>
@@ -206,6 +206,14 @@ export class InfoTabs {
   protected readonly tab = signal<Tab>('signals');
   protected readonly signals = signal<Signal[]>([]);
   protected readonly news = signal<NewsItem[]>([]);
+  /** Events of the accounts the header selection shows, plus the ones that belong to no account (feed, news, global). */
+  protected readonly events = computed(() => {
+    const all = this.store.events();
+    const shown = this.store.overview()?.accounts;
+    if (this.store.scope() === 'all' || !shown) return all;
+    const ids = new Set(shown.map((a) => a.accountId));
+    return all.filter((e) => e.accountId === null || ids.has(e.accountId));
+  });
   protected readonly sentiment = signal<Sentiment[]>([]);
   protected readonly instruments = signal<InstrumentDto[]>([]);
   protected readonly scanTarget = signal('');
@@ -236,7 +244,7 @@ export class InfoTabs {
   protected toggle(key: string): void { this.expanded.update((open) => (open === key ? null : key)); }
 
   protected count(t: Tab): number {
-    return t === 'signals' ? this.signals().length : t === 'news' ? this.news().length : this.store.events().length;
+    return t === 'signals' ? this.signals().length : t === 'news' ? this.news().length : this.events().length;
   }
 
   protected async refresh(): Promise<void> {

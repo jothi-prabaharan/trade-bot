@@ -51,7 +51,7 @@ const SESSION_LABEL: Record<string, { text: string; cls: string }> = {
           <option value="all">All accounts</option>
           <option value="real">REAL only</option>
           <option value="paper">PAPER only</option>
-          @for (a of store.accounts(); track a.accountId) { <option [value]="'' + a.accountId">{{ a.accountName }}</option> }
+          @for (a of store.accounts(); track a.accountId) { <option [value]="'' + a.accountId">{{ a.accountName }}{{ a.isActive ? '' : ' (inactive)' }}</option> }
         </select>
 
         <div class="d-none d-md-flex align-items-center gap-2 flex-wrap">

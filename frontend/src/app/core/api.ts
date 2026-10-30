@@ -2,9 +2,9 @@ import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http'
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
-  AccountDto, ApiError, Candle, ChartPattern, DashboardOverview, GeminiConfigResponse, InstrumentDto, LoginResponse, MarketHoliday,
-  NewsItem, PatternRow, PnlCurve, PushAlertKinds, PushDeliveryResult, PushDevice, RiskConfig, Scope, Sentiment, Signal, StrategyConfig,
-  SystemEvent, TradeDetail,
+  AccountDto, ApiError, BrokerConnectionCheck, BrokerSetupReport, Candle, ChartPattern, DashboardOverview, GeminiConfigResponse, InstrumentDto,
+  LoginResponse, MarketHoliday, NewsItem, PatternRow, PnlCurve, PushAlertKinds, PushDeliveryResult, PushDevice, RiskConfig, Scope, Sentiment, Signal,
+  StrategyConfig, SystemEvent, TotpComparison, TradeDetail,
 } from './models';
 import { ValidationRulesDocument } from './validation/rules';
 
@@ -31,9 +31,13 @@ export class ApiService {
     return this.http.post<AccountDto>(`/api/accounts/${id}/mode`, { targetMode, confirmClientId });
   }
   loginUrl(id: number): Observable<{ url: string }> { return this.http.get<{ url: string }>(`/api/accounts/${id}/auth/login-url`); }
-  exchangeRequestToken(id: number, requestToken: string): Observable<{ tokenExpiry: string }> {
-    return this.http.post<{ tokenExpiry: string }>(`/api/accounts/${id}/auth/request-token`, { requestToken });
+  exchangeRequestToken(id: number, requestToken: string): Observable<{ tokenExpiry: string; connection: BrokerConnectionCheck | null }> {
+    return this.http.post<{ tokenExpiry: string; connection: BrokerConnectionCheck | null }>(`/api/accounts/${id}/auth/request-token`, { requestToken });
   }
+  /** GET /accounts/v1/user/details with today's access token, via the API. */
+  checkConnection(id: number): Observable<BrokerConnectionCheck> { return this.http.post<BrokerConnectionCheck>(`/api/accounts/${id}/auth/check`, {}); }
+  brokerSetup(id: number): Observable<BrokerSetupReport> { return this.http.get<BrokerSetupReport>(`/api/accounts/${id}/auth/setup`); }
+  totpCheck(id: number, code: string): Observable<TotpComparison> { return this.http.post<TotpComparison>(`/api/accounts/${id}/auth/totp-check`, { code }); }
   submitOtp(id: number, otp: string): Observable<void> { return this.http.post<void>(`/api/accounts/${id}/auth/otp`, { otp }); }
   triggerLogin(id: number): Observable<void> { return this.http.post<void>(`/api/accounts/${id}/auth/login`, {}); }
   accountKill(id: number, reason: string): Observable<void> { return this.http.post<void>(`/api/accounts/${id}/kill-switch`, { reason }); }

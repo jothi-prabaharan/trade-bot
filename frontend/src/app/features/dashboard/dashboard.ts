@@ -5,7 +5,8 @@ import { AccountDrawer } from '../config/account-drawer';
 import { HolidaysDrawer, PatternsDrawer } from '../config/catalog-drawers';
 import { NotificationsDrawer } from '../config/notifications-drawer';
 import { RiskDrawer } from '../config/risk-drawer';
-import { GeminiDrawer, StrategyDrawer, TokenDrawer } from '../config/settings-drawers';
+import { PaytmDrawer } from '../config/paytm-drawer';
+import { GeminiDrawer, StrategyDrawer } from '../config/settings-drawers';
 import { AccountCards } from './account-cards';
 import { HeaderBar } from './header-bar';
 import { InfoTabs } from './info-tabs';
@@ -18,7 +19,7 @@ import { TradeGrid } from './trade-grid';
   selector: 'tb-dashboard',
   imports: [
     HeaderBar, AccountCards, PnlPanel, TradeGrid, InfoTabs, TradeDetailDrawer,
-    AccountDrawer, RiskDrawer, StrategyDrawer, GeminiDrawer, PatternsDrawer, HolidaysDrawer, TokenDrawer, NotificationsDrawer,
+    AccountDrawer, RiskDrawer, StrategyDrawer, GeminiDrawer, PatternsDrawer, HolidaysDrawer, PaytmDrawer, NotificationsDrawer,
   ],
   template: `
     <tb-header-bar />
@@ -40,7 +41,7 @@ import { TradeGrid } from './trade-grid';
     <tb-gemini-drawer />
     <tb-patterns-drawer />
     <tb-holidays-drawer />
-    <tb-token-drawer />
+    <tb-paytm-drawer />
     <tb-notifications-drawer />
   `,
 })

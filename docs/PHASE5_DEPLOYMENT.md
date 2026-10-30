@@ -71,6 +71,7 @@ Internet ──443──> nginx (TLS, IP allowlist, CSP, rate limits)
 | Overview (services, health, release, newest backup, allowlist, slice memory) | `sudo tradebotctl status` |
 | Logs | `sudo tradebotctl logs api -f` (`news`, `auth`, `nginx`, `postgres`, `backup`, `health`) |
 | Deploy latest `main` | `sudo tradebotctl deploy` |
+| Which build is live | `sudo tradebotctl version` (also `build` in `tradebotctl status`'s health line; login-failure alerts say `(build abc1234)`) |
 | Deploy a tag/commit | `sudo tradebotctl deploy --ref v1.2.0` |
 | Roll back to the previous release | `sudo tradebotctl rollback` |
 | Restart services | `sudo tradebotctl restart` |
@@ -172,9 +173,13 @@ Trading alerts (entries, exits, kill switch, login failures) come from the appli
 ## 9. Go-live checklist
 1. Run at least a week in PAPER on the server. Watch the 08:45 login, 08:50 preparation, feed, signals and 15:15 square-off, and get Telegram alerts working.
 2. Confirm the scrip-master sync worked: lot sizes are filled in and `tradebotctl status` is healthy before 09:15.
-3. On the first REAL account, set `max_lots_per_trade = 1` and keep the daily loss limit small.
-4. Switch the account to REAL from its card (typed client ID) **after** the close; the first REAL session runs the next morning.
-5. Run a restore drill and check that offsite copies appear.
+3. On each REAL/data-provider account card, open **Paytm**:
+   - Every setup line should be green.
+   - **Compare** the code from your authenticator app: it should say *Matches*.
+   - After the 08:45 login, **Check connection** should show your name and Paytm client ID.
+4. On the first REAL account, set `max_lots_per_trade = 1` and keep the daily loss limit small.
+5. Switch the account to REAL from its card (typed client ID) **after** the close; the first REAL session runs the next morning.
+6. Run a restore drill and check that offsite copies appear.
 
 ## 10. Validation done before release (in a container similar to the target)
 | Check | Result |

@@ -24,7 +24,8 @@ All three use `AddSystemd()` (systemd `Type=notify`, journal logging) and read t
 |---|---|---|
 | 08:30 | News worker | Pre-market scan: macro (NIFTY/BANKNIFTY) + F&O/index-weight companies in batches of 30; sentiment recomputed |
 | 08:40 | Engine | Pre-open: seeds missing detectors into `mst.chart_patterns`, scrip master sync (`mst.security_master`) |
-| 08:45 | Auth worker | Headless login for REAL and data-provider accounts without today's token (mobile → password → code screens until the redirect: authenticator TOTP, login PIN, or SMS OTP). Each account has its own saved Chromium profile, so Paytm sees a known device instead of a new browser it challenges with an SMS OTP. On an SMS-OTP screen the bot switches to the authenticator if offered; otherwise it alerts and shows an OTP box on the account card for 3 minutes, ticks "trust this device" and submits the typed OTP (a rejected OTP is asked for again). Retries every 30 s only before the login ID is sent or for transient failures; a rejected password/TOTP/PIN, an unanswered OTP, missing credentials or an unrecognised page (described in the alert) stop at once. Then Telegram/push alert with the reason and the manual login link |
+| 08:45 | Auth worker | Headless login for REAL and data-provider accounts without today's token (mobile → password → code screens until the redirect: authenticator TOTP, login PIN, or SMS OTP). Each account has its own saved Chromium profile, so Paytm sees a known device instead of a new browser it challenges with an SMS OTP. On an SMS-OTP screen the bot switches to the authenticator if offered; otherwise it alerts and shows an OTP box on the account card for 3 minutes, ticks "trust this device" and submits the typed OTP (a rejected OTP is asked for again). Retries every 30 s only before the login ID is sent or for transient failures; a rejected password/TOTP/PIN, an unanswered OTP, missing credentials or an unrecognised page (described in the alert) stop at once. The new tokens are checked with `GET /accounts/v1/user/details` (access token as `x-jwt-token`) before they are stored: a token Paytm refuses fails the login (not retried), and a client ID other than the account's raises a critical alert. Then Telegram/push alert with the reason, the build (`build adfeb66`) and the manual login link |
+| after each login, then every 10 min | API | Connection check: user details with today's token. A token Paytm stops accepting shows as "Token rejected" on the card and raises one alert per token |
 | 08:50 (or login + 5 min) | Engine | Prep: feed connect, day PnL rows, REAL funds/profile sync, daily stock watchlist (60% catalyst + 40% liquidity), history backfill (5 days) |
 | 09:15 – 14:45 | Engine | Entries allowed (`strategy_config.entry_start_time` / `entry_cutoff_time`) |
 | every 15 min in session | News worker | Periodic macro scan (`PERIODIC`) |
@@ -80,7 +81,8 @@ PAPER and REAL share this engine. Only the gateway differs:
 | Auth | `POST auth/login` (`{ username, password, remember }`: `Auth:TokenHours` token, or `Auth:RememberDays` when `remember`) |
 | Dashboard | `GET dashboard/overview?scope=all\|real\|paper\|{accountId}`, WebSocket `/ws/dashboard?access_token=` (pushes on change, 1 s) |
 | Bot | `GET bot/status`, `POST bot/kill-switch` |
-| Accounts | `GET/POST accounts`, `GET/PUT accounts/{id}`, `POST accounts/{id}/mode` (typed client-id confirmation), `GET accounts/{id}/auth/login-url`, `POST accounts/{id}/auth/request-token`, `POST accounts/{id}/auth/login`, `POST accounts/{id}/kill-switch` |
+| Accounts | `GET/POST accounts`, `GET/PUT accounts/{id}` (API key/secret trimmed, TOTP secret normalised to Base32 before validation), `POST accounts/{id}/mode` (typed client-id confirmation), `POST accounts/{id}/kill-switch` |
+| Broker login | `GET accounts/{id}/auth/login-url`; `POST accounts/{id}/auth/request-token` (gettoken, then user details; Paytm's `PM_MERCHANT_AUTH_*` code comes back as the error code); `POST accounts/{id}/auth/login` (ask the Auth worker); `POST accounts/{id}/auth/otp` (SMS OTP typed on the card); `POST accounts/{id}/auth/check` (user details with today's token); `GET accounts/{id}/auth/setup` (credentials as they will be sent, masked; TOTP secret; server time in IST/UTC and drift from Paytm's clock); `POST accounts/{id}/auth/totp-check` (compares the server's TOTP with the code from the user's authenticator app; never returns a code) |
 | Risk | `GET/PUT accounts/{id}/risk-config` |
 | Trades | `GET trades`, `GET trades/{id}` (with order legs), `POST trades/{id}/exit`, `GET signals`, `GET events` |
 | Config | `GET/PUT strategy-config`, `GET patterns`, `PUT patterns/{id}`, `PUT patterns/category/{category}`, `GET patterns/detections`, `GET/POST/PUT/DELETE market-holidays` |
@@ -99,6 +101,8 @@ Secrets (`[Encrypted]`) are write-only. They are stored as `v1:` AES-GCM ciphert
 | `tradebot_news_check` | `{id}` (spike) or `manual:{id\|all}` | Engine / API → News worker |
 | `tradebot_news_updated` | `all` | News worker → listeners |
 | `tradebot_config_changed` | table name | API → engine and workers |
+| `tradebot_otp_requested` / `tradebot_otp_closed` | OTP prompt JSON / account id | Auth worker → API (card OTP box) |
+| `tradebot_otp_submitted` | `account_id:otp` | API → Auth worker |
 
 ## 9. Configuration
 | Key (env: `__` for `:`) | Used by | Notes |
@@ -113,6 +117,10 @@ Secrets (`[Encrypted]`) are write-only. They are stored as `v1:` AES-GCM ciphert
 | `WebPush:Subject` | all | VAPID contact (`mailto:` or `https:`); defaults to the dashboard origin `Cors:Origins:0` |
 
 Business settings live in `mst.*` (edited from the dashboard), not in appsettings.
+
+**Paytm errors and secrets.** Failed Paytm calls carry Paytm's result code and message (`BrokerApiException`). Failures on `/accounts/*` (token exchange, user details) or with a refused token are logged at Error, for example `Paytm authentication failed on /accounts/v2/gettoken (HTTP 400): Paytm: PM_MERCHANT_AUTH_400607 Invalid Api Key or Api Secret Key or Request Token (check that the API key and API secret match …)`. Response bodies are logged at Debug only, after redaction. Redaction (`SecretRedactor`) covers values under token/secret/key/password names in JSON, the same names in query strings (Playwright errors quote the login URL with `apiKey`), any JWT, and the account's own key, secret, password and TOTP secret. Login errors are redacted before they are logged, stored in `mst.account_auth_tokens`, written to events or alerted. Codes from Paytm's docs: `PM_MERCHANT_AUTH_400607` (invalid API key, API secret or request token; the request token is single-use and expires 30 minutes after login) and `PM_MERCHANT_AUTH_401669` (invalid token). Any other code is shown with Paytm's own message.
+
+**TOTP and time.** Codes are RFC 6238 (HMAC-SHA1, 30 s, 6 digits) from the Unix time, so IST and UTC give the same code; a local `DateTime` is converted rather than read as UTC. Every Paytm response's `Date` header updates a reading of Paytm's clock against the server's. Before each headless login the Auth worker also probes it with one `HEAD` request. A drift of 10 s or more is logged and added to a TOTP rejection ("the server clock is 42 s behind Paytm's …"). Codes are never shifted to compensate: the fix is time sync (chrony).
 
 **Alert delivery.** `IAlertSender` is an `AlertDispatcher` in every host: callers return at once, and each channel (Telegram, Web Push) drains its own queue in the background, 20 s per attempt. A slow channel never delays trading (e.g. the exit after a rejected stop-loss) or the other channel; queued alerts are delivered on shutdown. Web Push removes subscriptions the push service reports gone (404/410) and records other failures on the device.
 
@@ -130,6 +138,7 @@ The Paytm Money routes come from the official pyPMClient SDK. These details coul
 - The scrip-master file name and columns (header-alias CSV parsing).
 - Strike units (`StrikeDivisor`).
 - Login page selectors (`BrokerLogin:Steps`).
+- The client-ID field of `GET /accounts/v1/user/details` (looked up as `client_id`, `user_id`, `ucc` or `client_code`). A mismatch with the account's client ID alerts but does not block, so a different field name cannot stop logins.
 
 Run the first REAL day with one lot (`max_lots_per_trade = 1`).
 

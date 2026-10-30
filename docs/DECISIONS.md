@@ -61,7 +61,7 @@
 | Slippage buffer (REAL LMT) | 0.5%, rounded to tick size |
 | Product | Intraday (`I`) |
 | Session | Entries 09:15–14:45 IST; time square-off 15:15 IST |
-| Auth | 08:45 IST headless Playwright + TOTP from a saved per-account browser profile (a known device to Paytm); an SMS OTP (first login from the server) is typed in the account card's OTP box within 3 min. 3 retries for transient errors only (never once the login ID is sent and the page is unrecognised, nor on a rejected password/TOTP/PIN, unanswered OTP or missing credentials), then alert + manual token paste on dashboard |
+| Auth | 08:45 IST headless Playwright + TOTP from a saved per-account browser profile (a known device to Paytm); an SMS OTP (first login from the server) is typed in the account card's OTP box within 3 min. 3 retries for transient errors only (never once the login ID is sent and the page is unrecognised, nor on a rejected password/TOTP/PIN, unanswered OTP or missing credentials), then alert + manual token paste on dashboard. Tokens are verified with `GET /accounts/v1/user/details` before storing and every 10 min; Paytm error codes are logged with secrets redacted |
 | Alerts | Telegram |
 
 ## Phase 2 — Validation

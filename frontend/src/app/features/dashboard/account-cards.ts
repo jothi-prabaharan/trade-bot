@@ -1,6 +1,8 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
-import { faArrowRightArrowLeft, faKey, faMobileScreen, faPenToSquare, faPowerOff, faRotate, faServer, faSliders } from '@fortawesome/free-solid-svg-icons';
+import {
+  faArrowRightArrowLeft, faCircleCheck, faCircleExclamation, faKey, faMobileScreen, faPenToSquare, faPlug, faPowerOff, faRotate, faServer, faSliders,
+} from '@fortawesome/free-solid-svg-icons';
 import { firstValueFrom } from 'rxjs';
 import { ApiService, apiErrorText } from '../../core/api';
 import { DashboardStore } from '../../core/dashboard-store';
@@ -17,6 +19,7 @@ const TOKEN_BADGE: Record<TokenStatus, { text: string; cls: string }> = {
   FAILED: { text: 'Login failed', cls: 'text-bg-danger' },
   MISSING: { text: 'No token', cls: 'text-bg-danger' },
   PENDING: { text: 'Login pending', cls: 'text-bg-secondary' },
+  REJECTED: { text: 'Token rejected', cls: 'text-bg-danger' },
   NOT_REQUIRED: { text: 'No broker login', cls: 'text-bg-secondary' },
 };
 
@@ -68,6 +71,14 @@ interface CardView { card: AccountCard; profile: AccountDto | undefined; pnl: Ac
                 <button type="button" class="btn btn-sm btn-outline-secondary py-0 text-nowrap" (click)="panels.open('token', v.card.accountId)"><fa-icon [icon]="i.key" class="me-1" />Paste token</button>
               }
             </div>
+            @if (v.card.connection; as c) {
+              <div class="small mb-3 text-truncate" data-testid="paytm-connection-line" [class]="c.ok ? (c.clientIdMatches === false ? 'text-warning' : 'text-body-secondary') : 'text-danger'"
+                [title]="c.ok ? 'Checked ' + (c.checkedAtUtc | ist) + ' with Paytm user details' : (c.error ?? '')">
+                <fa-icon [icon]="c.ok && c.clientIdMatches !== false ? i.ok : i.bad" class="me-1" />
+                @if (c.ok) { Paytm: {{ c.name ?? 'connected' }} · {{ c.clientId ?? '—' }}{{ c.clientIdMatches === false ? ' (not this account)' : '' }} }
+                @else { Paytm check: {{ c.errorCode }} }
+              </div>
+            }
 
             <div class="d-flex align-items-baseline flex-wrap gap-2 mb-2" data-testid="account-balance">
               <div>
@@ -104,6 +115,9 @@ interface CardView { card: AccountCard; profile: AccountDto | undefined; pnl: Ac
               <button type="button" class="btn btn-sm btn-outline-secondary" (click)="panels.open('account', v.card.accountId)"><fa-icon [icon]="i.edit" class="me-1" />Profile</button>
               <button type="button" class="btn btn-sm btn-outline-secondary" (click)="panels.open('risk', v.card.accountId)"><fa-icon [icon]="i.risk" class="me-1" />Risk</button>
               <button type="button" class="btn btn-sm btn-outline-secondary" (click)="toggleMode(v.card)"><fa-icon [icon]="i.mode" class="me-1" />{{ v.card.mode === 'REAL' ? 'To PAPER' : 'To REAL' }}</button>
+              @if (usesBroker(v)) {
+                <button type="button" class="btn btn-sm btn-outline-secondary" (click)="panels.open('token', v.card.accountId)"><fa-icon [icon]="i.paytm" class="me-1" />Paytm</button>
+              }
               <button type="button" class="btn btn-sm btn-outline-danger ms-auto" [disabled]="v.pnl?.pnl?.killSwitch" (click)="kill(v.card)"><fa-icon [icon]="i.kill" class="me-1" />Kill</button>
             </div>
           </section>
@@ -124,7 +138,10 @@ export class AccountCards {
   private readonly api = inject(ApiService);
   private readonly confirm = inject(ConfirmService);
   private readonly toasts = inject(ToastService);
-  protected readonly i = { feed: faServer, retry: faRotate, key: faKey, edit: faPenToSquare, risk: faSliders, mode: faArrowRightArrowLeft, kill: faPowerOff, sms: faMobileScreen };
+  protected readonly i = {
+    feed: faServer, retry: faRotate, key: faKey, edit: faPenToSquare, risk: faSliders, mode: faArrowRightArrowLeft, kill: faPowerOff, sms: faMobileScreen,
+    paytm: faPlug, ok: faCircleCheck, bad: faCircleExclamation,
+  };
   protected readonly sending = signal<number | null>(null);
   protected readonly pnlClass = pnlClass;
   protected readonly duration = formatDuration;
@@ -145,7 +162,12 @@ export class AccountCards {
   protected token(s: TokenStatus) { return TOKEN_BADGE[s]; }
 
   protected needsLogin(c: AccountCard): boolean {
-    return (c.mode === 'REAL' || c.isDataProvider) && ['MISSING', 'FAILED', 'EXPIRED', 'EXPIRING'].includes(c.tokenStatus);
+    return (c.mode === 'REAL' || c.isDataProvider) && ['MISSING', 'FAILED', 'EXPIRED', 'EXPIRING', 'REJECTED'].includes(c.tokenStatus);
+  }
+
+  /** Accounts that log in to Paytm (REAL, the market-data provider, or any with an API key saved). */
+  protected usesBroker(v: CardView): boolean {
+    return v.card.mode === 'REAL' || v.card.isDataProvider || !!v.profile?.hasApiKey;
   }
 
   protected lossBar(pct: number): string {

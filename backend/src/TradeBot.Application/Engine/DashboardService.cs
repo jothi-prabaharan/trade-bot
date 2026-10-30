@@ -11,7 +11,7 @@ public sealed record AccountCard(
     long AccountId, string AccountName, string ClientId, string UserName, TradeMode Mode, bool IsDataProvider, bool IsActive,
     string TokenStatus, DateTime? TokenExpiryUtc, long? TokenSecondsLeft,
     decimal OpeningBalance, decimal AvailableMargin, decimal UtilisedMargin, decimal AllocatedCapital, DateTime? FundsSyncedAtUtc,
-    decimal Balance, decimal BalanceChange, decimal BalanceChangePct, OtpPrompt? OtpPrompt = null);
+    decimal Balance, decimal BalanceChange, decimal BalanceChangePct, OtpPrompt? OtpPrompt = null, BrokerConnectionCheck? Connection = null);
 
 public sealed record PnlSummary(
     decimal RealizedGross, decimal UnrealizedMtm, decimal Charges, decimal Net, int TotalTrades, int Wins, int Losses, decimal WinRatePct,
@@ -34,7 +34,7 @@ public sealed record DashboardOverview(BotStatus Bot, IReadOnlyList<AccountCard>
 
 /// <summary>Builds the single-screen dashboard: DB rows (accounts, PnL ledger, trade book) overlaid with live engine state.</summary>
 public sealed class DashboardService(ConfigCache config, TokenStore tokens, TradeManager trades, IMarketFeed feed, ITradingRepository trading,
-    EngineOrchestrator orchestrator, OtpPrompts otp, TimeProvider clock)
+    EngineOrchestrator orchestrator, OtpPrompts otp, BrokerConnectionChecker connection, TimeProvider clock)
 {
     /// <summary><paramref name="scope"/>: "all", "real", "paper" or an account id.</summary>
     public async Task<DashboardOverview> BuildAsync(string scope, CancellationToken ct)
@@ -66,6 +66,9 @@ public sealed class DashboardService(ConfigCache config, TokenStore tokens, Trad
                 { LoginStatus: LoginStatus.Success } => "VALID",
                 _ => "PENDING",
             };
+            // The latest user-details check, when it was made with the current token
+            var check = connection.Last(a.AccountId) is { } c && tok is not null && c.CheckedAtUtc >= tok.CreatedAt ? c : null;
+            if (check is { TokenRejected: true } && status is "VALID" or "EXPIRING") status = "REJECTED";
             var r = a.RiskConfig;
             // Balance = opening balance + today's net (realized + MTM − charges), the same figure as the PnL panel
             var opening = days.GetValueOrDefault(a.AccountId)?.OpeningBalance ?? r?.OpeningBalance ?? 0;
@@ -73,7 +76,7 @@ public sealed class DashboardService(ConfigCache config, TokenStore tokens, Trad
             return new AccountCard(a.AccountId, a.AccountName, a.ClientId, a.UserName, a.TradeMode, a.IsDataProvider, a.IsActive, status,
                 tok?.TokenExpiry, tok?.TokenExpiry is { } exp ? (long)Math.Max(0, (exp - now).TotalSeconds) : null,
                 opening, r?.AvailableMargin ?? 0, r?.UtilisedMargin ?? 0, r?.AllocatedCapital ?? 0, r?.FundsSyncedAt,
-                Math.Round(opening + change, 2), Math.Round(change, 2), opening == 0 ? 0 : Math.Round(change / opening * 100, 2), otp.For(a.AccountId));
+                Math.Round(opening + change, 2), Math.Round(change, 2), opening == 0 ? 0 : Math.Round(change / opening * 100, 2), otp.For(a.AccountId), check);
         }).ToList();
 
         var consolidated = Combine(perAccount.Select(p => p.Pnl).ToList());
@@ -83,13 +86,15 @@ public sealed class DashboardService(ConfigCache config, TokenStore tokens, Trad
         return new DashboardOverview(botStatus, cards, consolidated, perAccount, rows);
     }
 
-    public List<TradingAccount> InScope(string scope) => config.Accounts.Where(a => scope switch
-    {
-        "real" => a.TradeMode == TradeMode.Real,
-        "paper" => a.TradeMode == TradeMode.Paper,
-        "all" or "" => true,
-        _ => long.TryParse(scope, out var id) && a.AccountId == id,
-    }).ToList();
+    /// <summary>The accounts a header selection shows: active ones for all/real/paper, any single account picked by id.</summary>
+    public List<TradingAccount> InScope(string scope) => long.TryParse(scope, out var id)
+        ? config.AllAccounts.Where(a => a.AccountId == id).ToList()
+        : config.Accounts.Where(a => scope switch
+        {
+            "real" => a.TradeMode == TradeMode.Real,
+            "paper" => a.TradeMode == TradeMode.Paper,
+            _ => true,
+        }).ToList();
 
     private string Session(DateTime nowUtc)
     {

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
@@ -7,6 +8,7 @@ using TradeBot.Api.Hosting;
 using TradeBot.Application.Abstractions;
 using TradeBot.Application.Auth;
 using TradeBot.Application.Engine;
+using TradeBot.Application.Security;
 using TradeBot.Application.Validation;
 using TradeBot.Application.Validation.Forms;
 using TradeBot.Domain.Entities.Mst;
@@ -41,7 +43,7 @@ internal static class Json
 [ApiController, Authorize, Route("api/accounts")]
 public sealed class AccountController(
     IAccountRepository accounts, ITradingRepository trading, TradeManager trades, IPaytmMoneyClient paytm, IEventBus bus,
-    ConfigCache config, EngineOrchestrator orchestrator, OtpPrompts otp, TimeProvider clock) : ControllerBase
+    ConfigCache config, EngineOrchestrator orchestrator, OtpPrompts otp, BrokerConnectionChecker connection, TimeProvider clock) : ControllerBase
 {
     private static readonly string[] Secrets = ["apiKey", "apiSecret", "totpSecret", "loginPassword", "loginPin"];
 
@@ -55,6 +57,7 @@ public sealed class AccountController(
     [HttpPost, EnableRateLimiting("mutations")]
     public async Task<IActionResult> Create([FromBody] JsonObject body, CancellationToken ct)
     {
+        NormalizeCredentials(body);
         var candidate = new TradingAccount { AccountName = "", ClientId = "", UserName = "" };
         var merged = Json.Merge(candidate, body);
         if (FormValidator.Validate(FormRuleCatalog.TradingAccount, merged) is { Count: > 0 } errors) return ApiResults.Invalid(errors);
@@ -70,6 +73,7 @@ public sealed class AccountController(
     public async Task<IActionResult> Update(long id, [FromBody] JsonObject body, CancellationToken ct)
     {
         if (await accounts.GetAsync(id, ct) is not { } existing) return NotFound();
+        NormalizeCredentials(body);
         var merged = Json.Merge(existing, body);
         merged["hasApiKey"] = !string.IsNullOrEmpty(existing.ApiKey);
         merged["hasApiSecret"] = !string.IsNullOrEmpty(existing.ApiSecret);
@@ -112,16 +116,26 @@ public sealed class AccountController(
 
     public sealed record RequestTokenBody(string RequestToken);
 
-    /// <summary>Manual login fallback: exchange the redirect's requestToken for API tokens.</summary>
+    /// <summary>
+    /// Manual login fallback: exchange the redirect's requestToken for API tokens (POST /accounts/v2/gettoken), confirm
+    /// them with GET /accounts/v1/user/details, then store them. Paytm's result code comes back as the error code.
+    /// </summary>
     [HttpPost("{id:long}/auth/request-token"), EnableRateLimiting("mutations")]
     public async Task<IActionResult> ExchangeRequestToken(long id, RequestTokenBody body, CancellationToken ct)
     {
         if (await accounts.GetAsync(id, ct) is not { } a) return NotFound();
-        if (a.ApiKey is null || a.ApiSecret is null) return ApiResults.Invalid(RuleCodes.ApiCredentialsMissing, "API key and secret are required.");
-        if (string.IsNullOrWhiteSpace(body.RequestToken)) return ApiResults.Invalid("FIELD_REQUIRED", "requestToken is required.", "requestToken");
+        if (BrokerCredentials.Clean(a.ApiKey) is null || BrokerCredentials.Clean(a.ApiSecret) is null)
+            return ApiResults.Invalid(RuleCodes.ApiCredentialsMissing, "API key and secret are required.");
+        if (BrokerCredentials.Clean(body.RequestToken) is null) return ApiResults.Invalid("FIELD_REQUIRED", "requestToken is required.", "requestToken");
 
-        var t = await paytm.GenerateTokensAsync(a.ApiKey, a.ApiSecret, body.RequestToken.Trim(), ct);
+        BrokerTokens t;
+        try { t = await paytm.GenerateTokensAsync(a.ApiKey!, a.ApiSecret!, body.RequestToken, ct); }
+        catch (BrokerApiException e) { return ApiResults.Invalid(e.ErrorCode ?? "BROKER_ERROR", BrokerErrors.Describe(e), "requestToken"); }
+        catch (BrokerLoginException e) { return ApiResults.Invalid(RuleCodes.ApiCredentialsMissing, e.Message, "requestToken"); }
+
         var expiry = t.ExpiresUtc ?? Ist.ToUtc(Ist.Today(clock), new TimeOnly(23, 59));
+        var check = await connection.CheckAsync(a, t.AccessToken, expiry, ct);
+        if (check.TokenRejected) return ApiResults.Invalid(check.ErrorCode ?? "TOKEN_REJECTED", $"Paytm issued tokens but rejected them on user details. {check.Error}", "requestToken");
         await accounts.AddTokenAsync(new AccountAuthToken
         {
             AccountId = id, XJwtToken = t.AccessToken, PublicAccessToken = t.PublicAccessToken, ReadAccessToken = t.ReadAccessToken,
@@ -129,8 +143,37 @@ public sealed class AccountController(
         }, ct);
         await bus.PublishAsync(EventChannels.TokensUpdated, id.ToString(), ct);
         await orchestrator.OnTokensUpdatedAsync(ct);
-        return Ok(new { tokenExpiry = expiry });
+        return Ok(new { tokenExpiry = expiry, connection = check });
     }
+
+    /// <summary>Connection health: GET /accounts/v1/user/details with today's access token (x-jwt-token).</summary>
+    [HttpPost("{id:long}/auth/check"), EnableRateLimiting("mutations")]
+    public async Task<IActionResult> CheckConnection(long id, CancellationToken ct)
+    {
+        if (await accounts.GetAsync(id, ct) is not { } a) return NotFound();
+        var token = (await accounts.LatestTokensAsync(ct)).GetValueOrDefault(id);
+        var valid = token is { LoginStatus: LoginStatus.Success, XJwtToken.Length: > 0, TokenExpiry: { } exp } && exp > clock.GetUtcNow().UtcDateTime;
+        return Ok(await connection.CheckAsync(a, valid ? token!.XJwtToken : null, token?.TokenExpiry, ct));
+    }
+
+    /// <summary>Headless-login readiness without contacting Paytm's login: credentials as they will be sent, TOTP secret, clocks.</summary>
+    [HttpGet("{id:long}/auth/setup")]
+    public async Task<IActionResult> Setup(long id, CancellationToken ct)
+    {
+        if (await accounts.GetAsync(id, ct) is not { } a) return NotFound();
+        var reading = await paytm.ProbeClockAsync(ct) ?? paytm.Clock;
+        var now = clock.GetUtcNow().UtcDateTime;
+        return Ok(new BrokerSetupReport(id, BrokerSetup.Items(a), now, FixedLimits.ToIst(now).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+            reading is null ? null : Math.Round(reading.Skew.TotalSeconds, 1), BrokerConnectionChecker.ClockWarning(reading),
+            Totp.SecondsRemaining(now), connection.Last(id)));
+    }
+
+    public sealed record TotpCheckBody(string? Code);
+
+    /// <summary>Compares the server's TOTP with the code in the user's authenticator app; no code is ever sent back.</summary>
+    [HttpPost("{id:long}/auth/totp-check"), EnableRateLimiting("mutations")]
+    public async Task<IActionResult> CheckTotp(long id, TotpCheckBody body, CancellationToken ct) =>
+        await accounts.GetAsync(id, ct) is { } a ? Ok(BrokerSetup.CompareTotp(a, body.Code, clock.GetUtcNow().UtcDateTime)) : NotFound();
 
     /// <summary>Asks the Auth worker to run the headless TOTP login now.</summary>
     [HttpPost("{id:long}/auth/login"), EnableRateLimiting("mutations")]
@@ -184,12 +227,28 @@ public sealed class AccountController(
             var value = Json.Str(body, key);
             switch (key)
             {
-                case "apiKey": a.ApiKey = value; break;
-                case "apiSecret": a.ApiSecret = value; break;
-                case "totpSecret": a.TotpSecret = value?.Replace(" ", "").ToUpperInvariant(); break;
+                case "apiKey": a.ApiKey = BrokerCredentials.Clean(value); break;
+                case "apiSecret": a.ApiSecret = BrokerCredentials.Clean(value); break;
+                case "totpSecret": a.TotpSecret = BrokerCredentials.NormalizeTotpSecret(value); break;
                 case "loginPassword": a.LoginPassword = value; break;
                 case "loginPin": a.LoginPin = value; break;
             }
+        }
+    }
+
+    /// <summary>
+    /// Before validation: keys pasted with spaces or line breaks are trimmed, and a TOTP secret copied as authenticator apps
+    /// show it ("jbsw y3dp …") becomes the Base32 the rule expects.
+    /// </summary>
+    private static void NormalizeCredentials(JsonObject body)
+    {
+        // Only blanks typed: keep what is stored (an explicit null still clears it)
+        foreach (var key in new[] { "apiKey", "apiSecret", "totpSecret" })
+        {
+            if (body[key] is not JsonValue v || !v.TryGetValue<string>(out var s)) continue;
+            var clean = key == "totpSecret" ? BrokerCredentials.NormalizeTotpSecret(s) : BrokerCredentials.Clean(s);
+            if (clean is null) body.Remove(key);
+            else body[key] = clean;
         }
     }
 

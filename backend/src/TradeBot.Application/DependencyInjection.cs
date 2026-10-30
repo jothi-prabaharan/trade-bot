@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using TradeBot.Application.Abstractions;
 using TradeBot.Application.Auth;
@@ -37,6 +38,8 @@ public static class DependencyInjection
         services.AddSingleton<FundsSync>();
         services.AddSingleton<EngineOrchestrator>();
         services.AddSingleton<OtpPrompts>();
+        services.TryAddSingleton<BrokerConnectionChecker>();
+        services.AddSingleton<BrokerHealthMonitor>();
         services.AddSingleton<DashboardService>();
         services.AddSingleton<PnlCurveService>();
         services.AddSingleton<CandleQueryService>();
@@ -48,6 +51,9 @@ public static class DependencyInjection
         services.AddSingleton<NewsIntelligenceService>().AddSingleton<NewsScheduler>();
 
     /// <summary>TradeBot.Worker.Auth: daily headless broker logins.</summary>
-    public static IServiceCollection AddTradeBotBrokerAuth(this IServiceCollection services) =>
-        services.AddSingleton<BrokerAuthService>().AddSingleton<AuthScheduler>().AddSingleton<ISmsOtpPrompt, SmsOtpRelay>();
+    public static IServiceCollection AddTradeBotBrokerAuth(this IServiceCollection services)
+    {
+        services.TryAddSingleton<BrokerConnectionChecker>();
+        return services.AddSingleton<BrokerAuthService>().AddSingleton<AuthScheduler>().AddSingleton<ISmsOtpPrompt, SmsOtpRelay>();
+    }
 }

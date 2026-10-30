@@ -60,7 +60,7 @@ public static class DependencyInjection
 
         // Long-lived clients with pooled-connection rotation (singletons must not capture factory clients)
         services.AddSingleton<IPaytmMoneyClient>(sp => new PaytmMoneyClient(Http(TimeSpan.FromSeconds(30)),
-            sp.GetRequiredService<IOptions<PaytmMoneyOptions>>(), sp.GetRequiredService<ILogger<PaytmMoneyClient>>()));
+            sp.GetRequiredService<IOptions<PaytmMoneyOptions>>(), sp.GetRequiredService<ILogger<PaytmMoneyClient>>(), sp.GetRequiredService<TimeProvider>()));
         services.AddSingleton<INewsIntelligenceClient>(sp => new GeminiNewsClient(Http(TimeSpan.FromSeconds(180)), sp.GetRequiredService<ILogger<GeminiNewsClient>>()));
         var pushSubject = WebPushService.ResolveSubject(config);
         services.AddSingleton<IWebPushService>(sp => new WebPushService(

@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, effect, inject, signal, untracked } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiService, apiErrorText } from '../../core/api';
 import { PanelService } from '../../core/panels';
@@ -175,94 +175,5 @@ export class GeminiDrawer {
     this.hasApiKey.set(saved.hasApiKey);
     this.toasts.show('success', 'News settings saved', saved.hasApiKey ? 'Gemini key is set.' : 'No Gemini key yet: scans are skipped.');
     this.panels.close();
-  }
-}
-
-/** Manual broker login fallback: open Paytm's login page, paste the redirect's requestToken. */
-@Component({
-  selector: 'tb-token-drawer',
-  imports: [Drawer],
-  template: `
-    <tb-drawer [open]="isOpen()" (closed)="panels.close()" [title]="'Broker login · ' + (account()?.accountName ?? '')" width="min(520px, 100vw)">
-      <ol class="small ps-3">
-        <li>Open the Paytm Money login page and sign in (password, PIN and authenticator code).</li>
-        <li>After the redirect, copy the <code>requestToken</code> value from the address bar.</li>
-        <li>Paste it below; the API exchanges it for today's access tokens.</li>
-      </ol>
-      <button type="button" class="btn btn-outline-info btn-sm mb-3" (click)="openLogin()" [disabled]="busy()">Open Paytm login</button>
-      <label class="form-label" for="tb-request-token">requestToken</label>
-      <input id="tb-request-token" class="form-control mb-2 font-monospace" autocomplete="off" [value]="token()" (input)="token.set($any($event.target).value)" />
-      @if (error()) { <div class="alert alert-danger py-2 small">{{ error() }}</div> }
-      <hr />
-      <p class="small text-body-secondary mb-2">Or ask the auth worker to retry the headless TOTP login now.</p>
-      <button type="button" class="btn btn-outline-warning btn-sm" (click)="retryHeadless()" [disabled]="busy()">Retry headless login</button>
-      <ng-container footer>
-        <button type="button" class="btn btn-outline-secondary" (click)="panels.close()">Close</button>
-        <button type="button" class="btn btn-success" [disabled]="busy() || !token().trim()" (click)="exchange()">Use token</button>
-      </ng-container>
-    </tb-drawer>
-  `,
-})
-export class TokenDrawer {
-  protected readonly panels = inject(PanelService);
-  private readonly api = inject(ApiService);
-  private readonly toasts = inject(ToastService);
-  protected readonly isOpen = this.panels.isOpen('token');
-  private readonly accountId = this.panels.idFor('token');
-  protected readonly token = signal('');
-  protected readonly busy = signal(false);
-  protected readonly error = signal<string | null>(null);
-  private readonly accounts = signal<Map<number, string>>(new Map());
-  protected readonly account = computed(() => {
-    const id = this.accountId();
-    return id === null ? null : { accountName: this.accounts().get(id) ?? `#${id}` };
-  });
-
-  constructor() {
-    effect(() => {
-      if (this.isOpen()) untracked(() => {
-        this.token.set('');
-        this.error.set(null);
-        void firstValueFrom(this.api.accounts()).then((a) => this.accounts.set(new Map(a.map((x) => [x.accountId, x.accountName])))).catch(() => undefined);
-      });
-    });
-  }
-
-  protected async openLogin(): Promise<void> {
-    const id = this.accountId();
-    if (id === null) return;
-    try {
-      const { url } = await firstValueFrom(this.api.loginUrl(id));
-      window.open(url, '_blank', 'noopener');
-    } catch (e) {
-      this.error.set(apiErrorText(e));
-    }
-  }
-
-  protected async exchange(): Promise<void> {
-    const id = this.accountId();
-    if (id === null) return;
-    this.busy.set(true);
-    this.error.set(null);
-    try {
-      await firstValueFrom(this.api.exchangeRequestToken(id, this.token().trim()));
-      this.toasts.show('success', 'Broker token saved', 'The engine reconnects with the new token.');
-      this.panels.close();
-    } catch (e) {
-      this.error.set(apiErrorText(e));
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  protected async retryHeadless(): Promise<void> {
-    const id = this.accountId();
-    if (id === null) return;
-    try {
-      await firstValueFrom(this.api.triggerLogin(id));
-      this.toasts.show('info', 'Login requested', 'Watch the account card for the token status.');
-    } catch (e) {
-      this.error.set(apiErrorText(e));
-    }
   }
 }

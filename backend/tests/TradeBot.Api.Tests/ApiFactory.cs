@@ -33,6 +33,44 @@ public sealed class RecordingAlerts : IAlertSender
     }
 }
 
+/// <summary>Paytm Money stand-in: token exchange and user details answer from settable functions; nothing leaves the test.</summary>
+public sealed class FakePaytm : IPaytmMoneyClient
+{
+    public Func<string, string, string, BrokerTokens> Tokens { get; set; } = (_, _, _) => new BrokerTokens("access-jwt", "public-jwt", "read-jwt", null);
+    public Func<string, BrokerProfile> Profile { get; set; } = _ => new BrokerProfile("PM12345", "Asha Trader", "asha@example.in", "9876543210", "{}");
+    public BrokerClockReading? Clock { get; set; }
+    public List<string> ProfileTokens { get; } = [];
+    public List<(string ApiKey, string ApiSecret, string RequestToken)> TokenRequests { get; } = [];
+
+    public string LoginUrl(string apiKey, string state) => $"https://login.example/?apiKey={apiKey}&state={state}";
+    public Task<BrokerClockReading?> ProbeClockAsync(CancellationToken ct) => Task.FromResult(Clock);
+
+    public Task<BrokerTokens> GenerateTokensAsync(string apiKey, string apiSecret, string requestToken, CancellationToken ct)
+    {
+        lock (TokenRequests) TokenRequests.Add((apiKey, apiSecret, requestToken));
+        return Task.FromResult(Tokens(apiKey, apiSecret, requestToken));
+    }
+
+    public Task<BrokerProfile> GetProfileAsync(string token, CancellationToken ct)
+    {
+        lock (ProfileTokens) ProfileTokens.Add(token);
+        return Task.FromResult(Profile(token));
+    }
+
+    public Task<BrokerFunds> GetFundsAsync(string token, CancellationToken ct) => throw new NotSupportedException();
+    public Task<BrokerAck> PlaceOrderAsync(string accessToken, BrokerOrderRequest order, CancellationToken ct) => throw new NotSupportedException();
+    public Task<BrokerAck> ModifyOrderAsync(string accessToken, BrokerOrderRef reference, BrokerOrderRequest order, CancellationToken ct) => throw new NotSupportedException();
+    public Task<BrokerAck> CancelOrderAsync(string accessToken, BrokerOrderRef reference, BrokerOrderRequest order, CancellationToken ct) => throw new NotSupportedException();
+    public Task<IReadOnlyList<BrokerOrder>> GetOrdersAsync(string token, CancellationToken ct) => Task.FromResult<IReadOnlyList<BrokerOrder>>([]);
+    public Task<string> DownloadSecurityMasterAsync(string fileName, CancellationToken ct) => throw new NotSupportedException();
+    public Task<IReadOnlyList<TradeBot.Application.Market.Bar>> GetPriceChartAsync(string token, PriceChartRequest request, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<TradeBot.Application.Market.Bar>>([]);
+    public Task<IReadOnlyList<OptionChainRow>> GetOptionChainAsync(string token, string symbol, TradeBot.Domain.Enums.OptionType type, DateOnly expiry, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<OptionChainRow>>([]);
+    public Task<IReadOnlyList<TradeBot.Application.Market.Tick>> GetLiveQuotesAsync(string token, IReadOnlyCollection<FeedSubscription> scrips, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<TradeBot.Application.Market.Tick>>([]);
+}
+
 /// <summary>
 /// The real API host on a throwaway PostgreSQL database (TRADEBOT_API_TEST_DB), engine loops off,
 /// a controllable trading clock (Monday 10:00 IST) and recorded alerts.
@@ -47,6 +85,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(Ist.ToUtc(TradingDay, new TimeOnly(10, 0)), TimeSpan.Zero));
     public RecordingAlerts Alerts { get; } = new();
+    public FakePaytm Paytm { get; } = new();
     public FakePushService Push { get; } = new();
 
     public ApiFactory()
@@ -66,6 +105,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         {
             s.AddSingleton<TimeProvider>(Clock);
             s.AddSingleton<IAlertSender>(Alerts);
+            s.AddSingleton<IPaytmMoneyClient>(Paytm);
             s.AddSingleton<IWebPushService>(sp => new WebPushService(new PushServiceClient(new HttpClient(Push)),
                 sp.GetRequiredService<IDbContextFactory<TradeBotDbContext>>(), TimeProvider.System, "mailto:ops@example.com",
                 sp.GetRequiredService<ILogger<WebPushService>>()));

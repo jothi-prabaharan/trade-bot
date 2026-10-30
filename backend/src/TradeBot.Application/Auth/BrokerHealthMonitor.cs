@@ -1,0 +1,41 @@
+using System.Collections.Concurrent;
+using System.Net;
+using TradeBot.Application.Abstractions;
+using TradeBot.Domain.Entities.Trn;
+using TradeBot.Domain.Enums;
+
+namespace TradeBot.Application.Auth;
+
+/// <summary>
+/// Re-checks today's tokens with GET /accounts/v1/user/details right after each login and every 10 minutes, so a token
+/// Paytm stops accepting shows on the dashboard and raises one alert instead of surfacing as failed orders.
+/// </summary>
+public sealed class BrokerHealthMonitor(
+    IAccountRepository accounts, BrokerConnectionChecker connection, ITradingRepository trading, IAlertSender alerts, TimeProvider clock)
+{
+    public static readonly TimeSpan Interval = TimeSpan.FromMinutes(10);
+
+    // Token (by creation time) already alerted about, per account: one alert per rejected token
+    private readonly ConcurrentDictionary<long, DateTime> _alerted = new();
+
+    /// <summary>Checks every active account holding a token that is still valid today, or only <paramref name="accountId"/>.</summary>
+    public async Task<int> CheckAsync(long? accountId, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow().UtcDateTime;
+        var tokens = await accounts.LatestTokensAsync(ct);
+        var checkedCount = 0;
+        foreach (var a in await accounts.ListAsync(activeOnly: true, ct))
+        {
+            if (accountId is { } only && a.AccountId != only) continue;
+            if (tokens.GetValueOrDefault(a.AccountId) is not { LoginStatus: LoginStatus.Success, XJwtToken.Length: > 0, TokenExpiry: { } expiry } t || expiry <= now) continue;
+            var check = await connection.CheckAsync(a, t.XJwtToken, expiry, ct);
+            checkedCount++;
+            if (!check.TokenRejected || _alerted.TryGetValue(a.AccountId, out var seen) && seen == t.CreatedAt) continue;
+            _alerted[a.AccountId] = t.CreatedAt;
+            var text = $"Paytm no longer accepts today's token for {a.AccountName}: {check.Error}";
+            await trading.AddEventAsync(new SystemEvent { AccountId = a.AccountId, EventType = "TOKEN_REJECTED", Severity = EventSeverity.Critical, Message = text }, ct);
+            await alerts.SendAsync(AlertKind.Critical, $"🔐 {WebUtility.HtmlEncode(text)}\nUse Login now on the dashboard.", ct);
+        }
+        return checkedCount;
+    }
+}

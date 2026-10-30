@@ -1,5 +1,5 @@
 import { BrowserContext, Locator, Page, expect, test } from '@playwright/test';
-import { createECDH, randomBytes } from 'node:crypto';
+import { createECDH, createHmac, randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { ADMIN_PASSWORD, dbConfig } from './env.mjs';
 
@@ -12,6 +12,24 @@ const card = (name: string): Locator => page.locator(`section[aria-label="${name
 const field = (drawer: Locator, label: string): Locator => drawer.locator('tb-rule-field', { hasText: label }).locator('input, select, textarea').first();
 const drawer = (title: string): Locator => page.locator('.offcanvas', { has: page.locator('.offcanvas-title', { hasText: title }) });
 const toast = (title: string): Locator => page.locator('.toast', { hasText: title });
+
+/** RFC 6238 written independently of the server, to prove the server's codes match an authenticator app's. */
+function totp(base32Secret: string, at = Date.now()): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const bytes: number[] = [];
+  let value = 0, bits = 0;
+  for (const c of base32Secret.replace(/\s|=/g, '').toUpperCase()) {
+    value = (value << 5) | alphabet.indexOf(c);
+    bits += 5;
+    if (bits >= 8) { bytes.push((value >>> (bits - 8)) & 0xff); bits -= 8; }
+  }
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(at / 30_000)));
+  const h = createHmac('sha1', Buffer.from(bytes)).update(counter).digest();
+  const o = h[h.length - 1] & 0x0f;
+  const n = ((h[o] & 0x7f) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3];
+  return String(n % 1_000_000).padStart(6, '0');
+}
 
 // A real context, so later tests can open a second tab next to this one
 test.beforeAll(async ({ browser }) => {
@@ -275,6 +293,74 @@ test('phone: settings move to a menu, compact lists expand one row at a time, Es
   await page.keyboard.press('Escape');
   await expect(d).toBeHidden();
   await page.setViewportSize({ width: 1440, height: 1000 });
+});
+
+test('account selector: visible on phones too, filters cards, trades and events, and is restored or reset on reload', async () => {
+  const scope = page.getByLabel('Accounts shown');
+  const dismiss = page.getByRole('button', { name: 'Dismiss' });
+  while (await dismiss.count()) await dismiss.first().click({ timeout: 1000 }).catch(() => undefined);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(scope).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(scope).toBeVisible();
+
+  await scope.selectOption({ label: 'Paper Alpha' });
+  await expect(card('Paper Beta')).toHaveCount(0);
+  await expect(card('Paper Alpha')).toBeVisible();
+  const rows = page.locator('tb-trade-grid tbody tr[data-trade-id]');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('Paper Alpha');
+  await page.getByRole('tab', { name: /Events/ }).click();
+  const events = page.locator('tb-info-tabs');
+  await expect(events).toContainText('Trade TARGET_HIT at 130.65');
+  await expect(events).not.toContainText('Trade opened at 104.25');   // Paper Beta's
+
+  // The selection is remembered, and the dropdown shows it once the account list arrives
+  await page.reload();
+  await expect(scope.locator('option:checked')).toHaveText('Paper Alpha');
+  await expect(card('Paper Beta')).toHaveCount(0);
+
+  // A remembered account that no longer exists falls back to every account instead of an empty dashboard
+  await page.evaluate(() => localStorage.setItem('tradebot.scope', '999999'));
+  await page.reload();
+  await expect(scope.locator('option:checked')).toHaveText('All accounts');
+  await expect(card('Paper Beta')).toBeVisible();
+  await expect(card('Paper Alpha')).toBeVisible();
+});
+
+test('Paytm drawer: setup checklist, TOTP compared with an authenticator, and the user-details check', async () => {
+  // Keys pasted with stray spaces, the TOTP secret the way authenticator apps show it
+  await card('Real Primary').getByRole('button', { name: 'Profile' }).click();
+  const profile = drawer('Edit account');
+  await profile.getByLabel('API key', { exact: true }).fill('  e2e-key-0001-9f3a \n');
+  await profile.getByLabel('API secret', { exact: true }).fill('e2e-secret-0001 ');
+  await field(profile, 'TOTP secret').fill('jbsw y3dp ehpk 3pxp');
+  await expect(field(profile, 'TOTP secret')).toHaveValue('JBSWY3DPEHPK3PXP');
+  await profile.getByRole('button', { name: 'Save' }).click();
+  await expect(profile).toBeHidden();
+
+  await card('Real Primary').getByRole('button', { name: 'Paytm', exact: true }).click();
+  const d = drawer('Paytm connection');
+  const setup = d.getByTestId('paytm-setup');
+  await expect(setup).toContainText('API key (api_key)');
+  await expect(setup.locator('li', { hasText: 'API key (api_key)' })).toContainText('••••9f3a');
+  await expect(setup.locator('li', { hasText: 'API secret (api_secret_key)' })).toContainText('Set');
+  await expect(setup).not.toContainText('e2e-secret');
+  await expect(setup.locator('li', { hasText: 'TOTP secret' })).toContainText('Valid Base32 (80-bit)');
+  await expect(setup).toContainText('IST');
+
+  await d.getByPlaceholder('6-digit code').fill(totp('JBSWY3DPEHPK3PXP'));
+  await d.getByRole('button', { name: 'Compare' }).click();
+  await expect(d.getByTestId('totp-result')).toContainText('Matches');
+  await d.getByPlaceholder('6-digit code').fill(totp('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'));
+  await d.getByRole('button', { name: 'Compare' }).click();
+  await expect(d.getByTestId('totp-result')).toContainText('Does not match');
+
+  // No token today: the check says so instead of calling Paytm
+  await d.getByRole('button', { name: 'Check connection' }).click();
+  await expect(d.getByTestId('paytm-connection')).toContainText('NO_TOKEN');
+  await page.keyboard.press('Escape');
+  await expect(d).toBeHidden();
 });
 
 test('theme toggle is remembered across reloads', async () => {

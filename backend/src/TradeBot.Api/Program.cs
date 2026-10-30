@@ -29,6 +29,7 @@ builder.Services.AddTradeBotEngine();
 var engineEnabled = config.GetValue("Engine:Enabled", true);
 if (engineEnabled) builder.Services.AddHostedService<EngineHostedService>();
 builder.Services.AddHostedService<OtpPromptListener>();
+builder.Services.AddHostedService<BrokerHealthHostedService>();
 
 builder.Services.AddControllers().AddJsonOptions(o => ApiJson.Configure(o.JsonSerializerOptions));
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
@@ -84,7 +85,7 @@ app.UseRateLimiter();
 // Anonymous liveness + engine state for the server health check (nginx exposes it only to allowlisted IPs)
 app.MapGet("/health", (Microsoft.Extensions.Hosting.IHostEnvironment env, IMarketFeed feed, EngineOrchestrator orchestrator) => Results.Ok(new
 {
-    status = "ok", env = env.EnvironmentName, utc = DateTime.UtcNow,
+    status = "ok", env = env.EnvironmentName, build = TradeBot.Application.BuildInfo.Revision, utc = DateTime.UtcNow,
     engine = new { enabled = engineEnabled, prepared = orchestrator.Prepared, feedConnected = feed.IsConnected, lastTickUtc = feed.LastTickUtc },
 })).AllowAnonymous();
 app.Map("/ws/dashboard", (HttpContext ctx, DashboardService d, ITradingRepository trading, ILogger<DashboardService> log) =>

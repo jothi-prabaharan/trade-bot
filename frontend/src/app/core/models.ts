@@ -8,7 +8,7 @@ export type OrderStatus = 'PENDING' | 'PLACED' | 'OPEN' | 'TRIGGER_PENDING' | 'P
 export type SignalStatus = 'NEW' | 'DISPATCHED' | 'REJECTED' | 'EXPIRED';
 export type Severity = 'INFO' | 'WARNING' | 'CRITICAL';
 export type ImpactLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME_HALT';
-export type TokenStatus = 'NOT_REQUIRED' | 'MISSING' | 'FAILED' | 'EXPIRED' | 'EXPIRING' | 'VALID' | 'PENDING';
+export type TokenStatus = 'NOT_REQUIRED' | 'MISSING' | 'FAILED' | 'EXPIRED' | 'EXPIRING' | 'VALID' | 'PENDING' | 'REJECTED';
 export type MarketSession = 'HOLIDAY' | 'PRE_OPEN' | 'OPEN' | 'ENTRY_CLOSED' | 'CLOSED';
 export type PatternCategory = 'CANDLESTICK' | 'CLASSICAL' | 'HARMONIC' | 'SMC_STRUCTURE';
 export type Scope = 'all' | 'real' | 'paper' | `${number}`;
@@ -31,9 +31,28 @@ export interface AccountCard {
   balance: number; balanceChange: number; balanceChangePct: number;
   /** Set while the Auth worker holds the Paytm page open for the SMS OTP. */
   otpPrompt: OtpPrompt | null;
+  /** Latest GET /accounts/v1/user/details check made with today's token. */
+  connection: BrokerConnectionCheck | null;
 }
 
 export interface OtpPrompt { accountId: number; untilUtc: string; sentTo: string | null; note: string | null }
+
+export interface BrokerConnectionCheck {
+  accountId: number; ok: boolean; tokenRejected: boolean; checkedAtUtc: string; clientId: string | null; name: string | null;
+  email: string | null; phone: string | null; clientIdMatches: boolean | null; tokenExpiryUtc: string | null;
+  errorCode: string | null; error: string | null; clockSkewSeconds: number | null;
+}
+
+export interface SetupItem { key: string; label: string; ok: boolean; required: boolean; detail: string }
+
+export interface BrokerSetupReport {
+  accountId: number; items: SetupItem[]; serverTimeUtc: string; serverTimeIst: string; clockSkewSeconds: number | null; clockWarning: string | null;
+  totpSecondsRemaining: number; lastConnection: BrokerConnectionCheck | null;
+}
+
+export interface TotpComparison {
+  result: 'MATCH' | 'CLOCK_OFF' | 'NO_MATCH' | 'BAD_CODE' | 'NO_SECRET' | 'BAD_SECRET'; message: string; stepOffset: number | null; secondsRemaining: number;
+}
 
 export interface PnlSummary {
   realizedGross: number; unrealizedMtm: number; charges: number; net: number; totalTrades: number; wins: number; losses: number;
@@ -54,7 +73,7 @@ export interface DashboardOverview { bot: BotStatus; accounts: AccountCard[]; co
 
 export interface SystemEvent { eventId: number; accountId: number | null; eventType: string; severity: Severity; message: string; payload: string; createdAt: string }
 
-export type SocketMessage = { type: 'overview'; data: DashboardOverview } | { type: 'events'; data: SystemEvent[] };
+export type SocketMessage = { type: 'overview'; scope?: Scope; data: DashboardOverview } | { type: 'events'; data: SystemEvent[] };
 
 export interface AccountDto {
   accountId: number; accountName: string; clientId: string; userName: string; email: string | null; phone: string | null;

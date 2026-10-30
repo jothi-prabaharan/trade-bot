@@ -39,6 +39,8 @@ const TOAST_EVENTS: Record<string, { title: string; tone: ToastTone }> = {
   PROFIT_LOCK: { title: 'Profit locked', tone: 'success' },
   LOGIN_SUCCESS: { title: 'Broker login', tone: 'success' },
   LOGIN_FAILED: { title: 'Broker login failed', tone: 'danger' },
+  LOGIN_CLIENT_MISMATCH: { title: 'Paytm client mismatch', tone: 'danger' },
+  TOKEN_REJECTED: { title: 'Paytm token rejected', tone: 'danger' },
   MODE_CHANGE: { title: 'Mode changed', tone: 'warning' },
   NEWS_EXTREME: { title: 'EXTREME news', tone: 'danger' },
 };

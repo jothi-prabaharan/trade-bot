@@ -36,9 +36,38 @@ public sealed record PriceChartRequest(
 
 public sealed record OptionChainRow(decimal Strike, OptionType Type, decimal? Ltp, long? OpenInterest, long? OiChange);
 
+/// <summary>
+/// A call Paytm answered with an error: HTTP status plus Paytm's own result code (e.g. PM_MERCHANT_AUTH_400607) and
+/// message. <see cref="Body"/> is already redacted, so the exception can be logged or stored as is.
+/// </summary>
+public class BrokerApiException(string message, int statusCode, string? errorCode, string? brokerMessage, string body) : Exception(message)
+{
+    public int StatusCode { get; } = statusCode;
+    public string? ErrorCode { get; } = errorCode;
+    public string? BrokerMessage { get; } = brokerMessage;
+    public string Body { get; } = body;
+
+    /// <summary>Paytm refused the access token itself: only a fresh login fixes it.</summary>
+    public bool TokenRejected => StatusCode is 401 or 403
+        || string.Equals(ErrorCode, "PM_MERCHANT_AUTH_401669", StringComparison.OrdinalIgnoreCase)
+        || BrokerMessage?.Contains("invalid token", StringComparison.OrdinalIgnoreCase) == true;
+}
+
+/// <summary>Paytm's clock minus ours, read from a response's Date header (whole seconds, so ±1 s at best).</summary>
+public sealed record BrokerClockReading(TimeSpan Skew, DateTime MeasuredAtUtc);
+
+/// <summary>Result of GET /accounts/v1/user/details with the account's access token.</summary>
+public sealed record BrokerConnectionCheck(
+    long AccountId, bool Ok, bool TokenRejected, DateTime CheckedAtUtc, string? ClientId, string? Name, string? Email, string? Phone,
+    bool? ClientIdMatches, DateTime? TokenExpiryUtc, string? ErrorCode, string? Error, double? ClockSkewSeconds);
+
 public interface IPaytmMoneyClient
 {
     string LoginUrl(string apiKey, string state);
+    /// <summary>Latest clock reading taken from any Paytm response; null until one arrives.</summary>
+    BrokerClockReading? Clock { get; }
+    /// <summary>Asks Paytm for its time (one light request) and returns the new reading, or null when unreachable.</summary>
+    Task<BrokerClockReading?> ProbeClockAsync(CancellationToken ct);
     Task<BrokerTokens> GenerateTokensAsync(string apiKey, string apiSecret, string requestToken, CancellationToken ct);
     Task<BrokerProfile> GetProfileAsync(string token, CancellationToken ct);
     Task<BrokerFunds> GetFundsAsync(string token, CancellationToken ct);

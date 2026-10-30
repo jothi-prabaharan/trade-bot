@@ -46,8 +46,11 @@ export class DashboardStore {
       const scope = this.scope();
       try { localStorage.setItem(SCOPE_KEY, scope); } catch { /* ignore */ }
       untracked(() => {
+        if (!this.started) return;
+        // A live socket pushes the new scope within a second; otherwise fetch it now rather than at the next poll
         if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ scope }));
-        if (this.started) void this.refreshCurve();
+        else void this.refreshOverview();
+        void this.refreshCurve();
       });
     });
     effect(() => {
@@ -83,11 +86,22 @@ export class DashboardStore {
   }
 
   async refreshOverview(): Promise<void> {
-    try { this.applyOverview(await firstValueFrom(this.api.overview(this.scope()))); } catch { /* socket or next poll will retry */ }
+    const scope = this.scope();
+    try {
+      const o = await firstValueFrom(this.api.overview(scope));
+      // The selection changed while this was loading: its own request (or push) brings the right data
+      if (scope === this.scope()) this.applyOverview(o);
+    } catch { /* socket or next poll will retry */ }
   }
 
   async refreshAccounts(): Promise<void> {
-    try { this.accounts.set(await firstValueFrom(this.api.accounts())); } catch { /* keep last */ }
+    try {
+      const accounts = await firstValueFrom(this.api.accounts());
+      this.accounts.set(accounts);
+      // A remembered single-account selection whose account is gone would show an empty dashboard under "All accounts"
+      const scope = this.scope();
+      if (/^\d+$/.test(scope) && !accounts.some((a) => String(a.accountId) === scope)) this.scope.set('all');
+    } catch { /* keep last */ }
   }
 
   async refreshCurve(): Promise<void> {
@@ -110,11 +124,14 @@ export class DashboardStore {
     ws.onopen = () => {
       this.link.set('live');
       this.retryMs = 1000;
+      // The URL carried the scope at connect time; it may have changed while connecting
+      ws.send(JSON.stringify({ scope: this.scope() }));
     };
     ws.onmessage = (m: MessageEvent<string>) => {
       const msg = JSON.parse(m.data) as SocketMessage;
-      if (msg.type === 'overview') this.applyOverview(msg.data);
-      else this.applyEvents(msg.data);
+      if (msg.type === 'events') this.applyEvents(msg.data);
+      // Pushes built for the previous selection can still be in flight
+      else if (msg.scope === undefined || msg.scope === this.scope()) this.applyOverview(msg.data);
     };
     ws.onclose = () => {
       if (this.socket !== ws) return;
@@ -147,6 +164,12 @@ export class DashboardStore {
   }
 
   private static loadScope(): Scope {
-    try { return (localStorage.getItem(SCOPE_KEY) as Scope | null) ?? 'all'; } catch { return 'all'; }
+    let saved: string | null = null;
+    try { saved = localStorage.getItem(SCOPE_KEY); } catch { /* storage blocked */ }
+    return saved !== null && isScope(saved) ? saved : 'all';
   }
+}
+
+export function isScope(v: string): v is Scope {
+  return v === 'all' || v === 'real' || v === 'paper' || /^\d+$/.test(v);
 }

@@ -35,7 +35,8 @@ One page; every editor opens as an offcanvas drawer over it, so the trade book s
 ## 2. Live data
 `DashboardStore` (signals) owns all live state:
 - `/ws/dashboard?access_token=…&scope=…` pushes `{"type":"overview"}` (only when it changed, ≤ 1/s) and `{"type":"events"}` batches of new `trn.system_events`.
-- Scope changes are sent over the open socket (`{"scope":"paper"}`).
+- Scope changes are sent over the open socket (`{"scope":"paper"}`), and again when a socket opens, in case the selection changed while it was connecting. Each overview push carries its `scope`, and the store drops pushes for a selection it has already left. With the socket down, a change refreshes over REST at once.
+- The header's account selector ("Accounts shown") is remembered per browser. A remembered account that no longer exists falls back to "All accounts" instead of an empty dashboard. Picking one account shows it even when inactive (marked "(inactive)"), so it can be re-activated from its Profile; all/REAL/PAPER show active accounts only. The Events tab follows the selection (plus events that belong to no account).
 - If the socket drops, the overview is polled over REST every 5 s and the socket reconnects with back-off (1 s → 30 s).
 - When a trade opens or closes, the PnL curve and account list are refetched; the curve also refreshes every 5 s.
 - Countdowns (token expiry) tick from a 1 s clock signal between pushes.
@@ -64,7 +65,7 @@ One page; every editor opens as an offcanvas drawer over it, so the trade book s
 | News intelligence | `GET/PUT /api/news/config` | Weights show a live Σ; the Gemini key is write-only |
 | Chart patterns | `GET /api/patterns`, `PUT /api/patterns/{id}`, `PUT /api/patterns/category/{c}` | Family on/off, per-pattern toggle, editor for weight, candles, confirmations and JSON parameters; rows without a detector are flagged |
 | Market holidays | `GET/POST/PUT/DELETE /api/market-holidays` | Special sessions need open < close |
-| Broker login | `GET …/auth/login-url`, `POST …/auth/request-token`, `POST …/auth/login` | Manual requestToken paste, or ask the Auth worker to retry the headless login |
+| Paytm connection (card **Paytm** button, or **Paste token**) | `POST …/auth/check`, `GET …/auth/setup`, `POST …/auth/totp-check`, `GET …/auth/login-url`, `POST …/auth/request-token`, `POST …/auth/login` | **Connection**: user details with today's token (name, client ID, token expiry, or Paytm's error code). **Headless login setup**: API key (masked) and secret as they will be sent, login ID, password, TOTP secret, PIN, server time in IST and drift from Paytm. **TOTP compare**: type the code your authenticator app shows; tells a wrong secret from a drifting clock. **Manual login**: requestToken paste (verified before it is stored) or headless retry. The card shows the latest check, and "Token rejected" when Paytm refuses the token |
 
 ## 5. Confirmations and alerts
 | Action | Confirmation |

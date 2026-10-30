@@ -3,41 +3,52 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TradeBot.Application.Abstractions;
+using TradeBot.Application.Auth;
 using TradeBot.Application.Market;
+using TradeBot.Application.Security;
 using TradeBot.Domain.Enums;
 
 namespace TradeBot.Infrastructure.External.Paytm;
 
-public sealed class PaytmApiException(string message, int statusCode, string body) : Exception(message)
+/// <summary>
+/// Paytm Money Open API over REST. Orders use the access token; reads accept the read token. Failures carry Paytm's
+/// result code and are logged with every token, key and secret redacted; each response's Date header keeps a reading of
+/// Paytm's clock against ours (TOTP codes fail when the two drift apart).
+/// </summary>
+public sealed partial class PaytmMoneyClient(HttpClient http, IOptions<PaytmMoneyOptions> options, ILogger<PaytmMoneyClient> log, TimeProvider? clock = null)
+    : IPaytmMoneyClient
 {
-    public int StatusCode { get; } = statusCode;
-    public string Body { get; } = body;
-}
-
-/// <summary>Paytm Money Open API over REST. Orders use the access token; reads accept the read token.</summary>
-public sealed class PaytmMoneyClient(HttpClient http, IOptions<PaytmMoneyOptions> options, ILogger<PaytmMoneyClient> log) : IPaytmMoneyClient
-{
+    public const string UserDetailsPath = "/accounts/v1/user/details";
     private readonly PaytmMoneyOptions _o = options.Value;
+    private readonly TimeProvider _time = clock ?? TimeProvider.System;
+    private BrokerClockReading? _clock;
+
+    public BrokerClockReading? Clock => Volatile.Read(ref _clock);
 
     public string LoginUrl(string apiKey, string state) =>
-        $"{_o.LoginUrl}?apiKey={Uri.EscapeDataString(apiKey)}&state={Uri.EscapeDataString(state)}";
+        $"{_o.LoginUrl}?apiKey={Uri.EscapeDataString(BrokerCredentials.Clean(apiKey) ?? "")}&state={Uri.EscapeDataString(state)}";
 
     public async Task<BrokerTokens> GenerateTokensAsync(string apiKey, string apiSecret, string requestToken, CancellationToken ct)
     {
+        // Values pasted with a trailing space or line break make Paytm answer PM_MERCHANT_AUTH_400607
+        var (key, secret, request) = BrokerCredentials.ForTokenRequest(apiKey, apiSecret, requestToken);
         using var doc = await SendAsync(HttpMethod.Post, "/accounts/v2/gettoken", null,
-            new { api_key = apiKey, api_secret_key = apiSecret, request_token = requestToken }, ct);
+            new { api_key = key, api_secret_key = secret, request_token = request }, ct);
         var root = doc.RootElement;
-        var access = JsonFind.Str(root, "access_token") ?? throw new PaytmApiException("Token response has no access_token.", 200, root.GetRawText());
+        if (JsonFind.Str(root, "access_token") is not { Length: > 0 } access)
+            throw Failure("/accounts/v2/gettoken", 200, root.GetRawText(), "Paytm token response has no access_token");
         return new BrokerTokens(access, JsonFind.Str(root, "public_access_token"), JsonFind.Str(root, "read_access_token"), JwtExpiry(access));
     }
 
     public async Task<BrokerProfile> GetProfileAsync(string token, CancellationToken ct)
     {
-        using var doc = await SendAsync(HttpMethod.Get, "/accounts/v1/user/details", token, null, ct);
+        using var doc = await SendAsync(HttpMethod.Get, UserDetailsPath, token, null, ct);
         var r = doc.RootElement;
+        if (IsFailure(r)) throw Failure(UserDetailsPath, 200, r.GetRawText(), "Paytm user details call failed");
         return new BrokerProfile(
             JsonFind.Str(r, "client_id", "user_id", "ucc", "clientcode"),
             JsonFind.Str(r, "name", "user_name", "display_name", "full_name"),
@@ -78,8 +89,26 @@ public sealed class PaytmMoneyClient(HttpClient http, IOptions<PaytmMoneyOptions
     {
         using var res = await http.GetAsync($"{_o.BaseUrl}/data/v1/scrips/{Uri.EscapeDataString(fileName)}", ct);
         var body = await res.Content.ReadAsStringAsync(ct);
-        if (!res.IsSuccessStatusCode) throw new PaytmApiException($"Security master download failed ({(int)res.StatusCode}).", (int)res.StatusCode, Truncate(body));
+        if (!res.IsSuccessStatusCode) throw Failure("/data/v1/scrips", (int)res.StatusCode, body, $"Security master download failed ({(int)res.StatusCode})");
         return body;
+    }
+
+    public async Task<BrokerClockReading?> ProbeClockAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(5));
+            using var req = new HttpRequestMessage(HttpMethod.Head, _o.BaseUrl + "/");
+            var sent = _time.GetUtcNow().UtcDateTime;
+            using var res = await http.SendAsync(req, cts.Token);
+            return RecordClock(res, sent) ? Clock : null;
+        }
+        catch (Exception e) when (e is HttpRequestException or OperationCanceledException && !ct.IsCancellationRequested)
+        {
+            log.LogDebug(e, "Paytm clock probe failed");
+            return null;
+        }
     }
 
     public async Task<IReadOnlyList<Bar>> GetPriceChartAsync(string token, PriceChartRequest q, CancellationToken ct)
@@ -185,9 +214,9 @@ public sealed class PaytmMoneyClient(HttpClient http, IOptions<PaytmMoneyOptions
             var ok = status is null || !(status.Contains("fail", StringComparison.OrdinalIgnoreCase) || status.Contains("error", StringComparison.OrdinalIgnoreCase));
             return new BrokerAck(ok, JsonFind.Str(r, "order_no", "orderno"), JsonFind.Str(r, "message", "error_message", "reason"), r.GetRawText());
         }
-        catch (PaytmApiException e)
+        catch (BrokerApiException e)
         {
-            return new BrokerAck(false, null, e.Message, e.Body);
+            return new BrokerAck(false, null, e.BrokerMessage ?? e.Message, e.Body);
         }
     }
 
@@ -269,15 +298,68 @@ public sealed class PaytmMoneyClient(HttpClient http, IOptions<PaytmMoneyOptions
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(_o.RequestTimeoutSeconds));
+        var sent = _time.GetUtcNow().UtcDateTime;
         using var res = await http.SendAsync(req, cts.Token);
+        RecordClock(res, sent);
         var text = await res.Content.ReadAsStringAsync(cts.Token);
-        if (!res.IsSuccessStatusCode)
-        {
-            log.LogWarning("Paytm {Method} {Path} -> {Status}: {Body}", method, path, (int)res.StatusCode, Truncate(text));
-            throw new PaytmApiException($"Paytm API {path} returned {(int)res.StatusCode}.", (int)res.StatusCode, Truncate(text));
-        }
+        if (!res.IsSuccessStatusCode) throw Failure(path, (int)res.StatusCode, text, $"Paytm API {Queryless(path)} returned {(int)res.StatusCode}");
         return JsonDocument.Parse(string.IsNullOrWhiteSpace(text) ? "{}" : text);
     }
+
+    /// <summary>
+    /// Builds the exception for a refused call and logs it once, clearly: path, HTTP status, Paytm's result code and
+    /// message, and what to do. The body is redacted before it is logged or kept.
+    /// </summary>
+    private BrokerApiException Failure(string path, int status, string body, string summary)
+    {
+        var (code, message) = ErrorOf(body);
+        var redacted = SecretRedactor.Redact(Truncate(body));
+        var e = new BrokerApiException(code is null ? $"{summary}." : $"{summary}: {code}.", status, code, message, redacted);
+        var auth = path.StartsWith("/accounts/", StringComparison.Ordinal) || e.TokenRejected;
+        log.Log(auth ? LogLevel.Error : LogLevel.Warning, "Paytm {Kind} failed on {Path} (HTTP {Status}): {Error}",
+            auth ? "authentication" : "call", Queryless(path), status, BrokerErrors.Describe(e));
+        log.LogDebug("Paytm {Path} response body (redacted): {Body}", Queryless(path), redacted);
+        return e;
+    }
+
+    /// <summary>Paytm's result code (PM_MERCHANT_AUTH_400607 …) and message from an error body, when it has them.</summary>
+    internal static (string? Code, string? Message) ErrorOf(string body)
+    {
+        string? code = null, message = null;
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+            var r = doc.RootElement;
+            if (r.ValueKind == JsonValueKind.Object)
+            {
+                code = JsonFind.Str(r, "error_code", "response_code", "result_code", "code");
+                message = JsonFind.Str(r, "message", "error_message", "msg", "result_msg", "description");
+            }
+        }
+        catch (JsonException) { message = body.TrimStart().StartsWith('<') ? null : body.Length > 200 ? body[..200] : body; }
+        // The PM_* code is what Paytm's docs list; prefer it wherever it appears in the body
+        if (BrokerCode().Match(body) is { Success: true } m) code = m.Value;
+        return (string.IsNullOrWhiteSpace(code) ? null : code.Trim(), string.IsNullOrWhiteSpace(message) ? null : SecretRedactor.Redact(message.Trim()));
+    }
+
+    private static bool IsFailure(JsonElement r) =>
+        JsonFind.Str(r, "status") is { } status && (status.Equals("failure", StringComparison.OrdinalIgnoreCase) || status.Equals("error", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Date has whole seconds and cached responses carry Age; compare with the middle of our round trip.</summary>
+    private bool RecordClock(HttpResponseMessage res, DateTime sentUtc)
+    {
+        if (res.Headers.Date is not { } date) return false;
+        var received = _time.GetUtcNow().UtcDateTime;
+        var server = date.UtcDateTime + (res.Headers.Age ?? TimeSpan.Zero) + TimeSpan.FromMilliseconds(500);
+        var local = sentUtc + (received - sentUtc) / 2;
+        Volatile.Write(ref _clock, new BrokerClockReading(server - local, received));
+        return true;
+    }
+
+    private static string Queryless(string path) => path.Split('?')[0];
+
+    [GeneratedRegex(@"PM_[A-Z]+(?:_[A-Z]+)*_\d{3,}")]
+    private static partial Regex BrokerCode();
 
     internal static DateTime? JwtExpiry(string jwt)
     {

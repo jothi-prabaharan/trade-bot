@@ -10,7 +10,7 @@ public sealed class AuthWorker(AuthScheduler scheduler, IEventBus bus, ILogger<A
     {
         bus.Subscribe(EventChannels.LoginRequested, (p, _) => { scheduler.Enqueue(p); return Task.CompletedTask; });
         bus.Subscribe(EventChannels.ConfigChanged, (_, _) => { scheduler.InvalidateConfig(); return Task.CompletedTask; });
-        log.LogInformation("Auth worker started");
+        log.LogInformation("Auth worker started (build {Build})", TradeBot.Application.BuildInfo.Revision);
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
         try

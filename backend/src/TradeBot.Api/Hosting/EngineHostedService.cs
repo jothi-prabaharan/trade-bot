@@ -103,7 +103,9 @@ public static class DashboardSocket
             var lastEventId = (await trading.EventsAsync(1, cts.Token)).FirstOrDefault()?.EventId ?? 0;
             while (ws.State == WebSocketState.Open && !cts.IsCancellationRequested)
             {
-                var json = JsonSerializer.Serialize(new { type = "overview", data = await dashboard.BuildAsync(scope, cts.Token) }, ApiJson.Options);
+                // The scope travels with the data so a client can drop pushes for a selection it already left
+                var current = scope;
+                var json = JsonSerializer.Serialize(new { type = "overview", scope = current, data = await dashboard.BuildAsync(current, cts.Token) }, ApiJson.Options);
                 if (json != last)
                 {
                     await ws.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, cts.Token);
@@ -140,4 +142,33 @@ public sealed class OtpPromptListener(IEventBus bus, TradeBot.Application.Auth.O
     }
 
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+}
+
+/// <summary>Runs <see cref="TradeBot.Application.Auth.BrokerHealthMonitor"/> at startup, after each login and every 10 minutes; also when the engine is disabled.</summary>
+public sealed class BrokerHealthHostedService(TradeBot.Application.Auth.BrokerHealthMonitor monitor, IEventBus bus, ILogger<BrokerHealthHostedService> log)
+    : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        // null = every account; an id = the account that just logged in
+        var due = System.Threading.Channels.Channel.CreateUnbounded<long?>();
+        bus.Subscribe(EventChannels.TokensUpdated, (p, _) => { if (long.TryParse(p, out var id)) due.Writer.TryWrite(id); return Task.CompletedTask; });
+        due.Writer.TryWrite(null);
+        _ = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TradeBot.Application.Auth.BrokerHealthMonitor.Interval);
+            try { while (await timer.WaitForNextTickAsync(ct)) due.Writer.TryWrite(null); }
+            catch (OperationCanceledException) { }
+        }, CancellationToken.None);
+
+        try
+        {
+            await foreach (var accountId in due.Reader.ReadAllAsync(ct))
+            {
+                try { await monitor.CheckAsync(accountId, ct); }
+                catch (Exception e) when (e is not OperationCanceledException) { log.LogWarning(e, "Broker connection check failed"); }
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+    }
 }

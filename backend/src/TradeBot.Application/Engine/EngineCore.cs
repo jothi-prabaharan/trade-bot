@@ -22,7 +22,10 @@ public sealed class ConfigCache(IConfigRepository configs, IAccountRepository ac
     public GeminiNewsConfig Gemini { get; private set; } = new() { ModelName = "gemini-flash-latest" };
     public List<ChargeRate> ChargeRates { get; private set; } = [];
     public MarketCalendar Calendar { get; private set; } = MarketCalendar.WeekendsOnly;
+    /// <summary>Active accounts: the ones the engine trades and the dashboard totals.</summary>
     public List<TradingAccount> Accounts { get; private set; } = [];
+    /// <summary>Active and inactive, so the dashboard can still show (and re-activate) an inactive account picked on its own.</summary>
+    public List<TradingAccount> AllAccounts { get; private set; } = [];
     public List<Instrument> Instruments { get; private set; } = [];
     public List<ChartPattern> Patterns { get; private set; } = [];
     public DateTime LoadedAtUtc { get; private set; }
@@ -35,7 +38,8 @@ public sealed class ConfigCache(IConfigRepository configs, IAccountRepository ac
         Gemini = await configs.GeminiAsync(ct) ?? Gemini;
         ChargeRates = await configs.ChargeRatesAsync(ct);
         Calendar = new MarketCalendar(await configs.HolidaysAsync(ct));
-        Accounts = await accounts.ListAsync(activeOnly: true, ct);
+        AllAccounts = await accounts.ListAsync(activeOnly: false, ct);
+        Accounts = AllAccounts.Where(a => a.IsActive).ToList();
         Instruments = await market.InstrumentsAsync(tradableOnly: false, ct);
         Patterns = await configs.PatternsAsync(ct);
         LoadedAtUtc = DateTime.UtcNow;
